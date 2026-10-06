@@ -500,7 +500,10 @@
       user-select: none;
       touch-action: none;
       z-index: 1;
+      /* Evita um flash do PNG no tamanho intrínseco antes do JS aplicar a geometria do grid. */
+      visibility: hidden;
     }
+    [data-type="token"][data-positioned="true"] { visibility: visible; }
     [data-type="token"]:focus-visible { outline: none; }
     .token__image {
       display: block;
@@ -1634,6 +1637,8 @@
         token.style.width = `${tokenGrid.size * cellSize}px`;
         token.style.height = `${tokenGrid.size * cellSize}px`;
         token.style.setProperty("--token-number-size", `${Math.max(10, Math.min(24, cellSize * 0.34))}px`);
+        // Só libera a pintura depois de left/top/width/height estarem definidos.
+        token.dataset.positioned = "true";
       }
 
       function sortTokensLeftToRight(tokenList) {
