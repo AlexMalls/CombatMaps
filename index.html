@@ -528,15 +528,28 @@
     [data-type="token"]:focus-visible { outline: none; }
     .token__image {
       display: block;
-      width: auto;
-      height: auto;
-      max-width: 100%;
-      max-height: 100%;
+      /*
+        Renderiza o PNG numa área maior antes do transform da câmera e depois
+        compensa essa ampliação visualmente. Assim o zoom usa mais pixels do
+        arquivo original em vez de ampliar a rasterização pequena do token.
+      */
+      width: var(--token-render-size, 100%);
+      height: var(--token-render-size, 100%);
+      max-width: none;
+      max-height: none;
       object-fit: contain;
+      transform: scale(var(--token-render-inverse, 1));
+      transform-origin: center center;
+      image-rendering: auto;
       pointer-events: none;
       user-select: none;
       -webkit-user-drag: none;
-      filter: drop-shadow(0 3px 3px rgb(0 0 0 / 50%));
+      filter: drop-shadow(
+        0
+        var(--token-shadow-offset, 3px)
+        var(--token-shadow-blur, 3px)
+        rgb(0 0 0 / 50%)
+      );
     }
     [data-type="token"]::before {
       content: attr(data-selection-number);
@@ -1490,6 +1503,16 @@
 
       function renderCameraTransform() {
         cameraTransformFrame = 0;
+
+        // Supersampling dos tokens: o PNG é pintado na resolução necessária
+        // para o zoom atual e só então compensado visualmente. Isso evita que
+        // o compositor apenas estique uma versão rasterizada em poucos pixels.
+        const tokenRenderScale = clamp(state.cameraZoom, 1, CAMERA_MAX_ZOOM);
+        cameraStage.style.setProperty("--token-render-size", `${tokenRenderScale * 100}%`);
+        cameraStage.style.setProperty("--token-render-inverse", String(1 / tokenRenderScale));
+        cameraStage.style.setProperty("--token-shadow-offset", `${3 * tokenRenderScale}px`);
+        cameraStage.style.setProperty("--token-shadow-blur", `${3 * tokenRenderScale}px`);
+
         cameraStage.style.transform = `translate3d(${state.cameraX}px, ${state.cameraY}px, 0) scale(${state.cameraZoom})`;
       }
 
