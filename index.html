@@ -406,12 +406,33 @@
     }
 
     /* LAYER 0 — BACKGROUND. Não colocar ferramentas/objetos dentro dela. */
-    .background-layer {
+    /* VIEWPORT DA CÂMERA — o frame externo permanece fixo enquanto o mapa move/escala. */
+    .camera-viewport {
       position: absolute;
       inset: var(--frame-thickness);
       z-index: 0;
       overflow: hidden;
       border-radius: var(--frame-inner-radius);
+      background: #020707;
+      touch-action: none;
+      contain: layout paint style;
+    }
+    .camera-stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      transform: translate3d(0, 0, 0) scale(1);
+      will-change: transform;
+    }
+
+    .background-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      border-radius: 0;
       pointer-events: none;
       background: #020707;
     }
@@ -435,10 +456,10 @@
     /* LAYER 1 — GRID. Visualmente fixo; o slider altera apenas a medida lógica. */
     .workspace-grid {
       position: absolute;
-      inset: var(--frame-thickness);
+      inset: 0;
       z-index: 1;
       overflow: hidden;
-      border-radius: var(--frame-inner-radius);
+      border-radius: 0;
       pointer-events: none;
       background-image:
         linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
@@ -453,10 +474,10 @@
     /* LAYER 2+ — espaço reservado para objetos, mapas, tokens e ferramentas futuras. */
     .workspace-layers {
       position: absolute;
-      inset: var(--frame-thickness);
+      inset: 0;
       z-index: 2;
       overflow: hidden;
-      border-radius: var(--frame-inner-radius);
+      border-radius: 0;
       pointer-events: none;
     }
 
@@ -634,7 +655,7 @@
     }
     .formation-magic {
       position: absolute;
-      inset: var(--frame-thickness);
+      inset: 0;
       z-index: 7;
       pointer-events: none;
       overflow: hidden;
@@ -926,6 +947,9 @@
     <section class="workspace-card" aria-label="Campo de edição">
       <h1 class="sr-only">CombatMaps</h1>
 
+      <section id="camera-viewport" class="camera-viewport" aria-label="Área navegável do mapa">
+        <div id="camera-stage" class="camera-stage">
+
       <!-- LAYER 0: BACKGROUND — manter isolada e intocada por recursos futuros. -->
       <div class="background-layer" aria-hidden="true"></div>
 
@@ -955,6 +979,9 @@
         <span id="formation-magic-guide" class="formation-magic__guide"></span>
         <span id="formation-magic-glow" class="formation-magic__glow"></span>
       </div>
+
+        </div>
+      </section>
 
       <section id="token-action-menu" class="ui-panel token-action-menu" role="menu" aria-label="Ações dos tokens selecionados" hidden>
         <button id="token-action-move" class="ui-button token-action-menu__item" type="button" role="menuitem">Mover</button>
@@ -1122,6 +1149,8 @@
       const absoluteCheckbox = document.getElementById("grid-absolute");
       const grid = document.getElementById("workspace-grid");
       const workspaceCard = document.querySelector(".workspace-card");
+      const cameraViewport = document.getElementById("camera-viewport");
+      const cameraStage = document.getElementById("camera-stage");
       const workspaceLayers = document.getElementById("workspace-layers");
       const lasso = document.getElementById("token-lasso");
       const lassoPath = document.getElementById("token-lasso-path");
@@ -1210,7 +1239,10 @@
         moveSelectionOrder: [],
         selectionOrder: [],
         debugEnabled: true,
-        blockSensitivity: 1.7
+        blockSensitivity: 1.7,
+        cameraZoom: 1,
+        cameraX: 0,
+        cameraY: 0
       };
 
       const debugEntries = [];
@@ -1435,6 +1467,80 @@
         format: value => ({ input: numberFormat.format(value), aria: `${numberFormat.format(value)} vezes` }),
         apply: () => {}
       });
+
+      const CAMERA_MIN_ZOOM = 1;
+      const CAMERA_MAX_ZOOM = 4;
+      const CAMERA_WHEEL_RATE = 0.00155;
+      let cameraTransformFrame = 0;
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function clampCameraPosition(x, y, zoom = state.cameraZoom) {
+        const width = cameraViewport.clientWidth;
+        const height = cameraViewport.clientHeight;
+        const minX = Math.min(0, width - width * zoom);
+        const minY = Math.min(0, height - height * zoom);
+        return {
+          x: clamp(x, minX, 0),
+          y: clamp(y, minY, 0)
+        };
+      }
+
+      function renderCameraTransform() {
+        cameraTransformFrame = 0;
+        cameraStage.style.transform = `translate3d(${state.cameraX}px, ${state.cameraY}px, 0) scale(${state.cameraZoom})`;
+      }
+
+      function scheduleCameraTransform() {
+        if (cameraTransformFrame) return;
+        cameraTransformFrame = requestAnimationFrame(renderCameraTransform);
+      }
+
+      function setCameraTransform(zoom, x, y) {
+        const nextZoom = clamp(zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+        const position = clampCameraPosition(x, y, nextZoom);
+        state.cameraZoom = nextZoom;
+        state.cameraX = position.x;
+        state.cameraY = position.y;
+        scheduleCameraTransform();
+      }
+
+      function cameraViewportPoint(clientX, clientY) {
+        const rect = cameraViewport.getBoundingClientRect();
+        return {
+          x: clientX - rect.left,
+          y: clientY - rect.top,
+          inside: clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+        };
+      }
+
+      function clientToWorkspaceLayer(clientX, clientY) {
+        const point = cameraViewportPoint(clientX, clientY);
+        return {
+          x: (point.x - state.cameraX) / state.cameraZoom,
+          y: (point.y - state.cameraY) / state.cameraZoom,
+          insideViewport: point.inside
+        };
+      }
+
+      function zoomCameraAtClient(nextZoom, clientX, clientY) {
+        const viewportPoint = cameraViewportPoint(clientX, clientY);
+        if (!viewportPoint.inside) return false;
+        const oldZoom = state.cameraZoom;
+        const zoom = clamp(nextZoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+        if (Math.abs(zoom - oldZoom) < 0.0001) return false;
+
+        const worldX = (viewportPoint.x - state.cameraX) / oldZoom;
+        const worldY = (viewportPoint.y - state.cameraY) / oldZoom;
+        setCameraTransform(
+          zoom,
+          viewportPoint.x - worldX * zoom,
+          viewportPoint.y - worldY * zoom
+        );
+        return true;
+      }
 
       function getGridOrigin(cellSize = state.size) {
         return {
@@ -1914,13 +2020,12 @@
       }
 
       function getGridPointMarkerAtClient(clientX, clientY) {
-        const layerRect = workspaceLayers.getBoundingClientRect();
-        const localX = clientX - layerRect.left;
-        const localY = clientY - layerRect.top;
+        const local = clientToWorkspaceLayer(clientX, clientY);
+        if (!local.insideViewport) return null;
         return gridPointMarkers.find(marker => {
           const rect = getGridFootprintRect(marker.col, marker.row, marker.size);
-          return localX >= rect.x && localX <= rect.x + rect.width &&
-            localY >= rect.y && localY <= rect.y + rect.height;
+          return local.x >= rect.x && local.x <= rect.x + rect.width &&
+            local.y >= rect.y && local.y <= rect.y + rect.height;
         }) || null;
       }
 
@@ -1983,13 +2088,14 @@
           return null;
         }
 
-        const rect = workspaceLayers.getBoundingClientRect();
-        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+        const local = clientToWorkspaceLayer(clientX, clientY);
+        if (!local.insideViewport || local.x < 0 || local.x > workspaceLayers.clientWidth ||
+            local.y < 0 || local.y > workspaceLayers.clientHeight) return null;
 
         const cell = state.size;
         const origin = getGridOrigin(cell);
-        const localX = clientX - rect.left;
-        const localY = clientY - rect.top;
+        const localX = local.x;
+        const localY = local.y;
         const tokenSize = getTokenGridState(selectedTokens[markerIndex]).size;
 
         // O clique escolhe a CÉLULA em que caiu, não a interseção mais próxima.
@@ -2132,7 +2238,6 @@
         const start = getTokenGridState(token);
         const cell = state.size;
         const origin = getGridOrigin(cell);
-        const layerRect = workspaceLayers.getBoundingClientRect();
         const fixed = {
           se: { col: start.col, row: start.row },
           nw: { col: start.col + start.size, row: start.row + start.size },
@@ -2145,8 +2250,9 @@
         handle.setPointerCapture?.(event.pointerId);
 
         function move(pointerEvent) {
-          const px = pointerEvent.clientX - layerRect.left;
-          const py = pointerEvent.clientY - layerRect.top;
+          const pointer = clientToWorkspaceLayer(pointerEvent.clientX, pointerEvent.clientY);
+          const px = pointer.x;
+          const py = pointer.y;
           let w, h;
 
           if (corner === "se") { w = px - fixedX; h = py - fixedY; }
@@ -2319,8 +2425,9 @@
 
       function buildBlockProjection(session, clientX, clientY) {
         const cell = state.size;
-        const rawCol = (clientX - session.startX) / cell;
-        const rawRow = (clientY - session.startY) / cell;
+        const current = clientToWorkspaceLayer(clientX, clientY);
+        const rawCol = (current.x - session.startScene.x) / cell;
+        const rawRow = (current.y - session.startScene.y) / cell;
         const rawDistance = Math.hypot(rawCol, rawRow);
 
         // Aceleração progressiva: preserva o ângulo do gesto e amplia a distância
@@ -2379,6 +2486,7 @@
           pointerType,
           startX,
           startY,
+          startScene: clientToWorkspaceLayer(startX, startY),
           currentX,
           currentY,
           tokens: selectedTokens.slice(),
@@ -2448,20 +2556,14 @@
       let magicActive = false;
 
       function resizeMagicCanvas() {
-        const rect = workspaceLayers.getBoundingClientRect();
         const ratio = Math.min(2, window.devicePixelRatio || 1);
-        const width = Math.max(1, Math.round(rect.width * ratio));
-        const height = Math.max(1, Math.round(rect.height * ratio));
+        const width = Math.max(1, Math.round(workspaceLayers.clientWidth * ratio));
+        const height = Math.max(1, Math.round(workspaceLayers.clientHeight * ratio));
         if (formationMagicCanvas.width !== width || formationMagicCanvas.height !== height) {
           formationMagicCanvas.width = width;
           formationMagicCanvas.height = height;
         }
         magicContext.setTransform(ratio, 0, 0, ratio, 0, 0);
-      }
-
-      function clientToWorkspaceLayer(clientX, clientY) {
-        const rect = workspaceLayers.getBoundingClientRect();
-        return { x: clientX - rect.left, y: clientY - rect.top };
       }
 
       function positionMagicGlow(point) {
@@ -2504,11 +2606,10 @@
       }
 
       function animateMagicTrail(time) {
-        const rect = workspaceLayers.getBoundingClientRect();
         resizeMagicCanvas();
         const dt = magicLastFrame ? Math.min(0.035, (time - magicLastFrame) / 1000) : 0.016;
         magicLastFrame = time;
-        magicContext.clearRect(0, 0, rect.width, rect.height);
+        magicContext.clearRect(0, 0, workspaceLayers.clientWidth, workspaceLayers.clientHeight);
 
         if (magicActive && magicPointer && time - magicLastAmbientEmission > 48) {
           magicLastAmbientEmission = time;
@@ -2577,12 +2678,12 @@
       }
 
       function getGridCellAtClient(clientX, clientY, size) {
-        const rect = workspaceLayers.getBoundingClientRect();
+        const local = clientToWorkspaceLayer(clientX, clientY);
         const cell = state.size;
         const origin = getGridOrigin(cell);
         return {
-          col: Math.floor((clientX - rect.left - origin.x) / cell),
-          row: Math.floor((clientY - rect.top - origin.y) / cell),
+          col: Math.floor((local.x - origin.x) / cell),
+          row: Math.floor((local.y - origin.y) / cell),
           size
         };
       }
@@ -2791,11 +2892,11 @@
       const CANVAS_TAP_MOVE_TOLERANCE = 10;
 
       /* ================================================================
-         DESSELEÇÃO NO MODO TOQUE
-         Desktop: botão direito remove o último ponto; sem pontos, limpa os tokens.
-         Modo toque: o mesmo comportamento com DOIS dedos em área vazia.
-         Os dois dedos precisam começar fora de tokens e controles. Gestos com
-         movimento não contam como clique de dois dedos.
+         MULTITOQUE NO MODO TOQUE
+         - Com tokens selecionados: dois dedos em área vazia projetam o bloco;
+           um toque curto de dois dedos continua sendo o undo.
+         - Sem tokens selecionados: dois dedos controlam a câmera. A distância
+           entre os dedos controla o zoom e o centroide controla o pan.
          ================================================================ */
       const touchDeselectPointers = new Map();
       let touchDeselectCandidate = null;
@@ -2823,14 +2924,22 @@
       }
 
       function isCanvasGestureTarget(target) {
-        return !target.closest('[data-type="token"], .corner-settings, input, button, select, textarea, a');
+        return target instanceof Element &&
+          cameraViewport.contains(target) &&
+          !target.closest('[data-type="token"], .corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
+      }
+
+      function isCameraGestureTarget(target) {
+        return target instanceof Element &&
+          cameraViewport.contains(target) &&
+          !target.closest('.corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
       }
 
       function localPoint(event) {
-        const rect = workspaceCard.getBoundingClientRect();
+        const point = clientToWorkspaceLayer(event.clientX, event.clientY);
         return {
-          x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
-          y: Math.max(0, Math.min(rect.height, event.clientY - rect.top))
+          x: clamp(point.x, 0, workspaceLayers.clientWidth),
+          y: clamp(point.y, 0, workspaceLayers.clientHeight)
         };
       }
 
@@ -2874,13 +2983,12 @@
       }
 
       function selectTokensInsideLasso(points) {
-        const cardRect = workspaceCard.getBoundingClientRect();
         const selected = tokens.filter(token => {
           const rect = token.getBoundingClientRect();
-          const center = {
-            x: rect.left - cardRect.left + rect.width / 2,
-            y: rect.top - cardRect.top + rect.height / 2
-          };
+          const center = clientToWorkspaceLayer(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2
+          );
           return pointInsidePolygon(center, points);
         });
         selectTokenSet(selected);
@@ -3023,6 +3131,9 @@
           finishBlockProjection(true);
           candidate.blockActive = false;
         }
+        if (candidate?.cameraActive) {
+          candidate.cameraActive = false;
+        }
         if (candidate) {
           candidate.valid = false;
           candidate.cancelReason = reason;
@@ -3043,23 +3154,53 @@
         debugLog("touch", "estado multitoque limpo", { reason });
       }
 
+      function getTouchPairDistance(candidate) {
+        const points = getTouchPairPoints(candidate);
+        if (points.length !== 2) return 0;
+        return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+      }
+
+      function updateTouchCameraGesture(candidate, centroid) {
+        if (!candidate.cameraActive || !candidate.cameraAnchor || !candidate.startDistance) return;
+        const distance = getTouchPairDistance(candidate);
+        if (!distance) return;
+
+        const zoom = clamp(
+          candidate.startZoom * (distance / candidate.startDistance),
+          CAMERA_MIN_ZOOM,
+          CAMERA_MAX_ZOOM
+        );
+        const viewportPoint = cameraViewportPoint(centroid.x, centroid.y);
+        setCameraTransform(
+          zoom,
+          viewportPoint.x - candidate.cameraAnchor.x * zoom,
+          viewportPoint.y - candidate.cameraAnchor.y * zoom
+        );
+        candidate.cameraMoved = candidate.cameraMoved ||
+          Math.abs(zoom - candidate.startZoom) > 0.006 ||
+          Math.hypot(centroid.x - candidate.startCentroid.x, centroid.y - candidate.startCentroid.y) >= 2;
+      }
+
       function beginTouchDeselectPointer(event) {
         if (!state.touchMode || event.pointerType !== "touch") return;
 
         const now = performance.now();
         const emptyCanvas = isCanvasGestureTarget(event.target);
+        const cameraSurface = isCameraGestureTarget(event.target);
         const pointer = {
           start: { x: event.clientX, y: event.clientY },
           x: event.clientX,
           y: event.clientY,
           emptyCanvas,
+          cameraSurface,
           startedAt: now,
           captured: false
         };
         touchDeselectPointers.set(event.pointerId, pointer);
 
-        // Só capturamos toques que começaram na área de interação do mapa.
-        // Controles/tokens continuam recebendo seus próprios gestos normalmente.
+        // O primeiro dedo só é capturado de imediato no canvas vazio. Se ele
+        // começar sobre um token, esperamos o segundo dedo antes de capturar,
+        // preservando o toque simples de seleção.
         if (emptyCanvas) pointer.captured = captureTouchPointer(event.pointerId);
 
         if (touchDeselectPointers.size === 1) {
@@ -3068,16 +3209,25 @@
             firstAt: now,
             ids: new Set([event.pointerId]),
             twoFinger: false,
-            valid: emptyCanvas,
+            valid: true,
+            mode: null,
             blockActive: false,
+            cameraActive: false,
+            cameraMoved: false,
             startCentroid: null,
+            startDistance: 0,
+            startZoom: state.cameraZoom,
+            cameraAnchor: null,
             maxCentroidDistance: 0,
             maxPointerTravel: 0,
-            cancelReason: emptyCanvas ? null : "primeiro toque fora da área vazia"
+            firstEmptyCanvas: emptyCanvas,
+            firstCameraSurface: cameraSurface,
+            cancelReason: null
           };
           debugLog("touch", "primeiro toque multitoque registrado", {
             pointerId: event.pointerId,
             emptyCanvas,
+            cameraSurface,
             captured: pointer.captured
           });
           return;
@@ -3087,19 +3237,42 @@
           const candidate = touchDeselectCandidate;
           const joinedIn = now - candidate.firstAt;
           const joinedInTime = joinedIn <= TWO_FINGER_JOIN_MS;
+          const selected = hasSelectedToken();
+          const mode = selected ? "block" : "camera";
+          const targetAccepted = mode === "block"
+            ? candidate.firstEmptyCanvas && emptyCanvas
+            : candidate.firstCameraSurface && cameraSurface;
+
           candidate.ids.add(event.pointerId);
           candidate.twoFinger = joinedInTime;
-          candidate.valid = candidate.valid && emptyCanvas && joinedInTime;
+          candidate.mode = mode;
+          candidate.valid = joinedInTime && targetAccepted;
           candidate.cancelReason = candidate.valid ? null :
-            (!joinedInTime ? "segundo dedo entrou tarde" : "segundo toque fora da área vazia");
+            (!joinedInTime ? "segundo dedo entrou tarde" :
+              (mode === "block" ? "toque fora da área vazia" : "toque fora da área do mapa"));
           candidate.startCentroid = getTouchPairCentroid(candidate);
+          candidate.startDistance = getTouchPairDistance(candidate);
           candidate.maxPointerTravel = getTouchPairMaxTravel(candidate);
+
+          if (candidate.valid && mode === "camera" && candidate.startCentroid && candidate.startDistance > 0) {
+            candidate.startZoom = state.cameraZoom;
+            candidate.cameraAnchor = clientToWorkspaceLayer(candidate.startCentroid.x, candidate.startCentroid.y);
+            candidate.cameraActive = true;
+            // Depois que a intenção de dois dedos existe, capturamos ambos os
+            // ponteiros — inclusive se o primeiro começou sobre um token.
+            candidate.ids.forEach(id => {
+              const item = touchDeselectPointers.get(id);
+              if (item && !item.captured) item.captured = captureTouchPointer(id);
+            });
+          }
 
           debugLog("touch", "segundo toque multitoque registrado", {
             pointerId: event.pointerId,
             joinedInMs: Math.round(joinedIn),
             accepted: candidate.valid,
-            captured: pointer.captured,
+            mode,
+            startDistance: Math.round(candidate.startDistance),
+            zoom: Number(state.cameraZoom.toFixed(3)),
             startCentroid: candidate.startCentroid && {
               x: Math.round(candidate.startCentroid.x),
               y: Math.round(candidate.startCentroid.y)
@@ -3108,18 +3281,20 @@
           });
 
           if (candidate.valid) {
-            // A partir daqui o par é uma única intenção. Cancela ações de um
-            // dedo que possam ter começado enquanto o segundo dedo entrava.
+            // Cancela qualquer ação de um dedo que tenha começado nos poucos
+            // milissegundos anteriores à entrada do segundo dedo.
             cancelPendingCanvasInteractions({ cancelFormation: true });
+            tokenTapCandidates.clear();
             cancelActiveLasso();
+            closeTokenActionMenu();
             if (event.cancelable) event.preventDefault();
           }
           return;
         }
 
         if (touchDeselectPointers.size > 2 && touchDeselectCandidate) {
-          // O terceiro dedo pertence ao gesto de Debug e não deve deixar um
-          // movimento de bloco parcial ativo por baixo dele.
+          // O terceiro dedo pertence ao gesto de Debug. Mantemos a câmera na
+          // última posição válida, mas encerramos a intenção de dois dedos.
           cancelTouchPairGesture("terceiro dedo detectado");
         }
       }
@@ -3129,8 +3304,8 @@
         const pointer = touchDeselectPointers.get(event.pointerId);
         if (!pointer) return;
 
-        // O próprio PointerEvent já representa a posição mais recente. Não
-        // dependemos da frequência nem da ordem relativa dos dois pointermove.
+        // Cada stream atualiza independentemente; o centroide usa sempre as
+        // posições mais recentes de ambos os dedos, evitando exigir sincronia.
         pointer.x = event.clientX;
         pointer.y = event.clientY;
 
@@ -3146,9 +3321,17 @@
         candidate.maxCentroidDistance = Math.max(candidate.maxCentroidDistance, centroidDistance);
         candidate.maxPointerTravel = Math.max(candidate.maxPointerTravel, getTouchPairMaxTravel(candidate));
 
-        // IMPORTANTE: não invalidamos o gesto porque apenas um dedo andou.
-        // Em telas reais os dois streams raramente chegam no mesmo instante.
-        if (!candidate.blockActive && candidate.valid && hasSelectedToken() &&
+        if (candidate.mode === "camera") {
+          if (candidate.valid && candidate.cameraActive && !hasSelectedToken()) {
+            updateTouchCameraGesture(candidate, centroid);
+            if (event.cancelable) event.preventDefault();
+          }
+          return;
+        }
+
+        // Movimento de bloco: a intenção continua baseada exclusivamente no
+        // centroide; um dedo pode atualizar antes do outro sem invalidar o par.
+        if (!candidate.blockActive && candidate.valid && candidate.mode === "block" && hasSelectedToken() &&
             centroidDistance >= TWO_FINGER_CENTROID_THRESHOLD) {
           candidate.blockActive = beginBlockProjection(
             candidate.startCentroid.x,
@@ -3185,15 +3368,22 @@
           candidate.cancelReason = reason || "pointercancel";
         }
 
-        // Um movimento de bloco termina quando o primeiro dos dois dedos é
-        // levantado. Isso evita usar uma posição obsoleta do dedo que já saiu.
+        // Movimento de bloco termina no primeiro dedo levantado. A câmera também
+        // encerra o gesto, preservando a última transformação válida.
         const wasBlockActive = Boolean(candidate?.blockActive);
+        const wasCameraActive = Boolean(candidate?.cameraActive);
         if (wasBlockActive) {
           cancelScheduledTouchBlockRender();
           const centroid = candidate ? getTouchPairCentroid(candidate) : null;
           if (centroid) renderBlockProjection(centroid.x, centroid.y);
           finishBlockProjection(cancelled);
           candidate.blockActive = false;
+          candidate.valid = false;
+        }
+        if (wasCameraActive) {
+          const centroid = candidate ? getTouchPairCentroid(candidate) : null;
+          if (centroid && !cancelled) updateTouchCameraGesture(candidate, centroid);
+          candidate.cameraActive = false;
           candidate.valid = false;
         }
 
@@ -3203,16 +3393,20 @@
 
         touchDeselectCandidate = null;
         const elapsed = performance.now() - candidate.startedAt;
-        const qualifiesAsTap = !wasBlockActive && !cancelled && state.touchMode &&
+        const qualifiesAsTap = candidate.mode === "block" && !wasBlockActive && !cancelled && state.touchMode &&
           candidate.valid && candidate.twoFinger && elapsed <= TWO_FINGER_TAP_MS &&
           candidate.maxCentroidDistance < TWO_FINGER_CENTROID_THRESHOLD &&
           candidate.maxPointerTravel <= TWO_FINGER_TAP_SLOP;
 
         debugLog("touch", "gesto de dois dedos encerrado", {
-          action: qualifiesAsTap ? "undo" : (wasBlockActive ? "movimento de bloco" : "nenhuma"),
+          action: qualifiesAsTap ? "undo" :
+            (wasBlockActive ? "movimento de bloco" : (wasCameraActive ? "câmera" : "nenhuma")),
           elapsedMs: Math.round(elapsed),
           maxCentroidDistance: Math.round(candidate.maxCentroidDistance),
           maxPointerTravel: Math.round(candidate.maxPointerTravel),
+          zoom: Number(state.cameraZoom.toFixed(3)),
+          cameraX: Math.round(state.cameraX),
+          cameraY: Math.round(state.cameraY),
           reason: candidate.cancelReason
         });
 
@@ -3307,10 +3501,92 @@
         if (document.hidden && touchDeselectPointers.size) resetTouchPairState("documento ocultado");
       });
 
+      /* ================================================================
+         CÂMERA — DESKTOP
+         Scroll: zoom ancorado sob o cursor. Botão do meio pressionado + arrasto:
+         pan. O limite mínimo é 100%, portanto nunca revelamos área fora do mapa.
+         ================================================================ */
+      let desktopCameraPan = null;
+      let lastWheelDebugAt = 0;
+
+      workspaceCard.addEventListener("wheel", event => {
+        if (event.ctrlKey || state.touchMode || !isCameraGestureTarget(event.target)) return;
+        if (blockProjectionSession || formationSession || lassoSession || state.isMoving || desktopCameraPan) return;
+        const viewportPoint = cameraViewportPoint(event.clientX, event.clientY);
+        if (!viewportPoint.inside) return;
+
+        event.preventDefault();
+        let delta = event.deltaY;
+        if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16;
+        else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= Math.max(1, cameraViewport.clientHeight);
+        const nextZoom = state.cameraZoom * Math.exp(-delta * CAMERA_WHEEL_RATE);
+        const changed = zoomCameraAtClient(nextZoom, event.clientX, event.clientY);
+
+        const now = performance.now();
+        if (changed && now - lastWheelDebugAt > 140) {
+          lastWheelDebugAt = now;
+          debugLog("camera", "zoom pelo scroll", {
+            zoom: Number(state.cameraZoom.toFixed(3)),
+            x: Math.round(state.cameraX),
+            y: Math.round(state.cameraY)
+          });
+        }
+      }, { passive: false });
+
+      workspaceCard.addEventListener("pointerdown", event => {
+        if (state.touchMode || event.pointerType === "touch" || event.button !== 1) return;
+        if (!isCameraGestureTarget(event.target)) return;
+        if (blockProjectionSession || formationSession || lassoSession || state.isMoving) return;
+        event.preventDefault();
+        desktopCameraPan = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          cameraX: state.cameraX,
+          cameraY: state.cameraY,
+          moved: false
+        };
+        try { workspaceCard.setPointerCapture?.(event.pointerId); } catch {}
+        closeTokenActionMenu();
+        debugLog("camera", "pan pelo botão do meio iniciado", { zoom: Number(state.cameraZoom.toFixed(3)) });
+      }, true);
+
+      workspaceCard.addEventListener("pointermove", event => {
+        const session = desktopCameraPan;
+        if (!session || session.pointerId !== event.pointerId) return;
+        const dx = event.clientX - session.startX;
+        const dy = event.clientY - session.startY;
+        session.moved ||= Math.hypot(dx, dy) >= 2;
+        setCameraTransform(state.cameraZoom, session.cameraX + dx, session.cameraY + dy);
+        if (event.cancelable) event.preventDefault();
+      }, true);
+
+      function finishDesktopCameraPan(event, cancelled = false) {
+        const session = desktopCameraPan;
+        if (!session || session.pointerId !== event.pointerId) return;
+        desktopCameraPan = null;
+        try {
+          if (workspaceCard.hasPointerCapture?.(event.pointerId)) workspaceCard.releasePointerCapture(event.pointerId);
+        } catch {}
+        debugLog("camera", cancelled ? "pan pelo botão do meio cancelado" : "pan pelo botão do meio concluído", {
+          moved: session.moved,
+          zoom: Number(state.cameraZoom.toFixed(3)),
+          x: Math.round(state.cameraX),
+          y: Math.round(state.cameraY)
+        });
+        if (event.cancelable) event.preventDefault();
+      }
+
+      workspaceCard.addEventListener("pointerup", event => finishDesktopCameraPan(event, false), true);
+      workspaceCard.addEventListener("pointercancel", event => finishDesktopCameraPan(event, true), true);
+      workspaceCard.addEventListener("auxclick", event => {
+        if (!state.touchMode && event.button === 1 && isCameraGestureTarget(event.target)) event.preventDefault();
+      });
+
       // Desktop: clique direito simples mantém sua função antiga. Somente quando
       // há deslocamento com o botão direito pressionado o grupo é projetado.
       workspaceCard.addEventListener("pointerdown", event => {
-        if (state.touchMode || event.pointerType === "touch" || event.button !== 2 || !hasSelectedToken()) return;
+        if (state.touchMode || event.pointerType === "touch" || event.button !== 2 || !hasSelectedToken() || desktopCameraPan) return;
         if (event.target.closest('.corner-settings, .token-action-menu, dialog, input, button, select, textarea, a')) return;
         desktopBlockCandidate = {
           pointerId: event.pointerId,
@@ -3565,8 +3841,15 @@
       });
       visibleCheckbox.addEventListener("change", () => setVisible(visibleCheckbox.checked));
       absoluteCheckbox.addEventListener("change", () => setAbsolute(absoluteCheckbox.checked));
-      window.addEventListener("resize", updateAllTokens);
-      if ("ResizeObserver" in window) new ResizeObserver(updateAllTokens).observe(workspaceLayers);
+      function handleWorkspaceResize() {
+        const position = clampCameraPosition(state.cameraX, state.cameraY, state.cameraZoom);
+        state.cameraX = position.x;
+        state.cameraY = position.y;
+        scheduleCameraTransform();
+        updateAllTokens();
+      }
+      window.addEventListener("resize", handleWorkspaceResize);
+      if ("ResizeObserver" in window) new ResizeObserver(handleWorkspaceResize).observe(cameraViewport);
 
       document.addEventListener("pointerdown", event => {
         if (state.open && !settings.contains(event.target)) setOpen(false);
@@ -3631,6 +3914,14 @@
 
         if (event.key !== "Escape") return;
         let handled = false;
+        if (desktopCameraPan) {
+          const session = desktopCameraPan;
+          desktopCameraPan = null;
+          try {
+            if (workspaceCard.hasPointerCapture?.(session.pointerId)) workspaceCard.releasePointerCapture(session.pointerId);
+          } catch {}
+          handled = true;
+        }
         if (blockProjectionSession) {
           cancelBlockProjection();
           handled = true;
@@ -3707,4 +3998,3 @@
     })();
   </script>
 </body>
-</html>
