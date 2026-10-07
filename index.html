@@ -1490,7 +1490,6 @@
           link.setAttribute("stroke", `url(#${spectrum.id})`);
           const outline = document.createElementNS("http://www.w3.org/2000/svg", "rect");
           outline.classList.add("token-status-outline");
-          outline.setAttribute("rx", "4");
           tokenStatusLinks.append(link, outline);
           // Destaque de consulta independente de data-selected e da seleção de movimento.
           panel = { token, element, life, status, link, spectrum, outline };
@@ -1563,6 +1562,11 @@
         try { if (drag.panel.element.hasPointerCapture(drag.pointerId)) drag.panel.element.releasePointerCapture(drag.pointerId); } catch {}
       }
 
+      function getTokenStatusOutline(anchor) {
+        return { x: anchor.left - 4, y: anchor.top - 4,
+          width: anchor.right - anchor.left + 8, height: anchor.bottom - anchor.top + 8, rx: 4 };
+      }
+
       function getTokenStatusLink(anchor, panel) {
         const centerX = (anchor.left + anchor.right) / 2;
         const centerY = (anchor.top + anchor.bottom) / 2;
@@ -1570,9 +1574,19 @@
         const x2 = panel.x + panel.width / 2;
         const y2 = panel.y + panel.height / 2;
         const dx = x2 - centerX, dy = y2 - centerY;
-        const ratio = Math.max(Math.abs(dx) / Math.max(1, (anchor.right - anchor.left) / 2),
-          Math.abs(dy) / Math.max(1, (anchor.bottom - anchor.top) / 2));
-        const fraction = ratio > 1 ? 1 / ratio : 1;
+        const outline = getTokenStatusOutline(anchor);
+        const halfWidth = Math.max(1, outline.width / 2), halfHeight = Math.max(1, outline.height / 2);
+        const ratio = Math.max(Math.abs(dx) / halfWidth, Math.abs(dy) / halfHeight);
+        let fraction = ratio > 1 ? 1 / ratio : 1;
+        const radius = Math.min(outline.rx, halfWidth, halfHeight);
+        // Interseção com a curva do contorno, em vez do canto da caixa retangular.
+        if (ratio > 1 && Math.abs(dx * fraction) > halfWidth - radius && Math.abs(dy * fraction) > halfHeight - radius) {
+          const length = Math.hypot(dx, dy), ux = dx / length, uy = dy / length;
+          const cx = Math.sign(dx) * (halfWidth - radius), cy = Math.sign(dy) * (halfHeight - radius);
+          const projection = ux * cx + uy * cy;
+          const discriminant = Math.max(0, projection * projection - cx * cx - cy * cy + radius * radius);
+          fraction = (projection + Math.sqrt(discriminant)) / length;
+        }
         return { x1: centerX + dx * fraction, y1: centerY + dy * fraction, x2, y2 };
       }
 
@@ -1598,8 +1612,7 @@
             panel.link.setAttribute(attribute, value);
             panel.spectrum.setAttribute(attribute, value);
           });
-          const outlineBounds = { x: anchor.left - 4, y: anchor.top - 4,
-            width: anchor.right - anchor.left + 8, height: anchor.bottom - anchor.top + 8 };
+          const outlineBounds = getTokenStatusOutline(anchor);
           Object.entries(outlineBounds).forEach(([attribute, value]) => panel.outline.setAttribute(attribute, value));
           occupied.push(position);
         });

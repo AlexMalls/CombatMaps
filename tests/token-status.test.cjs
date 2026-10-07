@@ -19,7 +19,7 @@ function setup(){
     window:{setTimeout(fn){const id=++timerId;timers.set(id,fn);return id},clearTimeout:id=>timers.delete(id)},
     performance:{now:()=>1000},statusLongClickToken:null,statusLongClickUntil:0,
     a,b,opened,timers});
-  for(const name of ['registerTokenData','getTokenInfo','clearTokenSelection','openStatusForToken','releaseTokenPressPointer',
+  for(const name of ['getTokenStatusOutline','registerTokenData','getTokenInfo','clearTokenSelection','openStatusForToken','releaseTokenPressPointer',
     'cancelTokenPress','cancelAllTokenPresses','beginTokenPress','moveTokenPress','endTokenPress'])vm.runInContext(source(name),c);
   assert.equal(vm.runInContext('typeof beginTokenPress',c),'function','token press classification is missing');
   vm.runInContext('registerTokenData(a);registerTokenData(b)',c);
@@ -99,17 +99,21 @@ test('connector reaches behind the card in all directions and hides when overlap
   const c=setup();vm.runInContext(source('clamp')+source('getTokenStatusLink'),c);
   c.anchor={left:100,right:140,top:100,bottom:140};
   for(const [panel,expected] of [
-    [{x:160,y:80,width:100,height:80},[140,120,210,120]],
-    [{x:0,y:80,width:80,height:80},[100,120,40,120]],
-    [{x:80,y:0,width:80,height:80},[120,100,120,40]],
-    [{x:80,y:160,width:80,height:80},[120,140,120,200]]]){
+    [{x:160,y:80,width:100,height:80},[144,120,210,120]],
+    [{x:0,y:80,width:80,height:80},[96,120,40,120]],
+    [{x:80,y:0,width:80,height:80},[120,96,120,40]],
+    [{x:80,y:160,width:80,height:80},[120,144,120,200]]]){
     c.panel=panel;const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
     assert.deepEqual([r.x1,r.y1,r.x2,r.y2],expected);
   }
   c.panel={x:0,y:180,width:80,height:80};
   const diagonal=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
   assert.equal(diagonal.x2,40);assert.equal(diagonal.y2,220);
-  assert.equal(diagonal.x1,104);assert.equal(diagonal.y1,140);
+  assert.equal(diagonal.x1,100.8);assert.equal(diagonal.y1,144);
+  c.panel={x:0,y:0,width:80,height:80};
+  const corner=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
+  const expected=100-4/Math.sqrt(2);
+  assert.ok(Math.abs(corner.x1-expected)<1e-9);assert.ok(Math.abs(corner.y1-expected)<1e-9);
   c.panel={x:80,y:80,width:80,height:80};const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
   assert.equal(r.x1,r.x2);assert.equal(r.y1,r.y2);
 });
