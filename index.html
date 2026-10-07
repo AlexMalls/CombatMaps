@@ -389,19 +389,7 @@
       pointer-events: none;
       animation: tool-orbit 9s linear infinite;
     }
-    .ui-tool[data-tool-type="priority"][aria-pressed="true"]::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      background: radial-gradient(circle at 18% 28%, var(--color-magic-gold) 0 1px, transparent 1.7px),
-        radial-gradient(circle at 82% 72%, var(--color-magic-cyan) 0 1px, transparent 1.7px);
-      box-shadow: 0 0 12px var(--color-magic-halo), inset 0 0 8px var(--color-magic-halo);
-      pointer-events: none;
-      animation: tool-sparkle 2.6s ease-in-out infinite alternate;
-    }
     @keyframes tool-orbit { to { transform: rotate(360deg); } }
-    @keyframes tool-sparkle { from { opacity: 0.45; } to { opacity: 0.9; } }
     .ui-box { background: var(--color-surface); }
     .ui-box--light { background: var(--color-surface-light); color: var(--color-text-inverse); }
     dialog { max-width: min(32rem, calc(100% - 2rem)); background: var(--color-dialog); }
@@ -958,6 +946,8 @@
       width: 3.25rem;
       padding: var(--space-2) 0;
       border-radius: 2rem;
+      /* Dois ícones fixos: sem rolagem e sem cortar o contorno selecionado. */
+      overflow: visible;
     }
     .corner-settings[data-open="true"] .corner-settings__panel {
       visibility: visible;
@@ -1087,18 +1077,18 @@
 
 <aside id="tools-menu" class="corner-settings corner-settings--top-right tools-menu" data-open="false" aria-label="Ferramentas">
     <button id="tools-trigger" class="ui-button--icon corner-settings__trigger" type="button"
-      aria-label="Ferramentas" aria-expanded="false" aria-controls="tools-panel" title="Ferramentas">
+      aria-label="Ferramentas" aria-expanded="false" aria-controls="tools-panel">
       <svg class="corner-settings__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15Z"/>
       </svg>
     </button>
     <section id="tools-panel" class="ui-panel corner-settings__panel tools-menu__panel" role="toolbar" aria-label="Ferramentas do mapa" aria-orientation="vertical" inert>
-      <button class="ui-tool" type="button" data-tool="ruler" aria-label="Régua — ferramenta de prioridade" aria-pressed="false" title="Régua (prioridade)">
+      <button class="ui-tool" type="button" data-tool="ruler" aria-label="Régua — ferramenta de prioridade" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m3 16 13-13 5 5L8 21Zm10-10 2 2m-5 1 2 2m-5 1 2 2m-5 1 2 2"/>
         </svg>
       </button>
-      <button class="ui-tool" type="button" data-tool="heart" aria-label="Coração — ferramenta visual" aria-pressed="false" title="Coração (visual)">
+      <button class="ui-tool" type="button" data-tool="heart" aria-label="Coração — ferramenta visual" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M12 21 3.4 12.6C-2 7.2 5.4.3 10.5 5.2L12 6.7l1.5-1.5C18.6.3 26 7.2 20.6 12.6Z"/>
         </svg>
