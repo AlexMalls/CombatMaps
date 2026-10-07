@@ -51,6 +51,13 @@
       --color-accent-hover: #d2f0e1;
       --color-highlight: #e4fff2;
       --color-highlight-soft: rgb(172 214 198 / 12%);
+      /* Ferramentas: halo rainbow e partículas discretas compartilhados. */
+      --color-magic-pink: #e9a5e8;
+      --color-magic-blue: #8fbcff;
+      --color-magic-cyan: #89efe3;
+      --color-magic-gold: #efda99;
+      --color-magic-halo: rgb(143 188 255 / 24%);
+      --tool-visual-inactive-opacity: 0.2;
       --color-selection: rgb(172 214 198 / 24%);
       --color-move-target: #f29a49;
       --color-move-target-soft: rgb(242 154 73 / 10%);
@@ -85,7 +92,7 @@
       --color-thumb: #c9ecdc;
       --color-checkmark: #06332d;
       --color-grid: #ffffff;
-      --grid-opacity: 0.24;
+      --grid-opacity: 0.05;
       --grid-spacing: 48px; /* tamanho visual fixo do grid; o slider NÃO altera este valor */
 
       /* Estrutura do campo de edição */
@@ -346,6 +353,55 @@
       backdrop-filter: blur(22px);
       -webkit-backdrop-filter: blur(22px);
     }
+    /* Ferramentas globais: ícone, toggle visual e seleção exclusiva. */
+    .ui-tool {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: var(--color-accent);
+      background: transparent;
+      box-shadow: none;
+      opacity: 0.65;
+      transition: opacity var(--duration-normal), transform var(--duration-normal);
+    }
+    .ui-tool svg { width: 1.1rem; height: 1.1rem; pointer-events: none; }
+    .ui-tool:is(:hover, :focus-visible) { background: transparent; color: var(--color-highlight); transform: scale(1.08); }
+    .ui-tool:focus-visible { outline: 1px solid var(--color-focus); outline-offset: 2px; }
+    .ui-tool[aria-pressed="true"] { opacity: 1; color: var(--color-highlight); }
+    .ui-tool[data-tool-type="visual"][aria-pressed="false"] { opacity: var(--tool-visual-inactive-opacity); }
+    .ui-tool[data-tool-type="priority"][aria-pressed="true"]::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      padding: 1px;
+      border-radius: 50%;
+      background: conic-gradient(var(--color-magic-pink), var(--color-magic-blue), var(--color-magic-cyan), var(--color-magic-gold), var(--color-magic-pink));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude;
+      pointer-events: none;
+      animation: tool-orbit 9s linear infinite;
+    }
+    .ui-tool[data-tool-type="priority"][aria-pressed="true"]::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 18% 28%, var(--color-magic-gold) 0 1px, transparent 1.7px),
+        radial-gradient(circle at 82% 72%, var(--color-magic-cyan) 0 1px, transparent 1.7px);
+      box-shadow: 0 0 12px var(--color-magic-halo), inset 0 0 8px var(--color-magic-halo);
+      pointer-events: none;
+      animation: tool-sparkle 2.6s ease-in-out infinite alternate;
+    }
+    @keyframes tool-orbit { to { transform: rotate(360deg); } }
+    @keyframes tool-sparkle { from { opacity: 0.45; } to { opacity: 0.9; } }
     .ui-box { background: var(--color-surface); }
     .ui-box--light { background: var(--color-surface-light); color: var(--color-text-inverse); }
     dialog { max-width: min(32rem, calc(100% - 2rem)); background: var(--color-dialog); }
@@ -826,6 +882,10 @@
       right: max(calc(var(--frame-thickness) + var(--space-2)), env(safe-area-inset-right));
       bottom: max(calc(var(--frame-thickness) + var(--space-2)), env(safe-area-inset-bottom));
     }
+    .corner-settings--top-right {
+      right: max(calc(var(--frame-thickness) + var(--space-2)), env(safe-area-inset-right));
+      top: max(calc(var(--frame-thickness) + var(--space-2)), env(safe-area-inset-top));
+    }
     .corner-settings__trigger {
       position: absolute;
       width: var(--grid-trigger-size);
@@ -844,6 +904,7 @@
       transition: opacity var(--duration-normal), transform var(--duration-normal) var(--ease-interface);
     }
     .corner-settings--top-left .corner-settings__trigger { left: 0; top: 0; }
+    .corner-settings--top-right .corner-settings__trigger { right: 0; top: 0; }
     .corner-settings--bottom-right .corner-settings__trigger { right: 0; bottom: 0; }
     .corner-settings:is(:hover, :focus-within) .corner-settings__trigger,
     .corner-settings__trigger[aria-expanded="true"] {
@@ -882,6 +943,21 @@
       bottom: calc(var(--grid-trigger-size) + var(--space-2));
       transform: translateY(calc(var(--grid-trigger-size) / 2 + var(--space-2))) scale(0.16);
       transform-origin: calc(100% - var(--grid-trigger-size) / 2) calc(100% + var(--space-2) + var(--grid-trigger-size) / 2);
+    }
+    .corner-settings--top-right .corner-settings__panel {
+      right: 0;
+      top: calc(var(--grid-trigger-size) + var(--space-2));
+      transform: translateY(calc(-1 * var(--space-2))) scaleY(0.15);
+      transform-origin: top right;
+    }
+    .tools-menu__panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-1);
+      width: 3.25rem;
+      padding: var(--space-2) 0;
+      border-radius: 2rem;
     }
     .corner-settings[data-open="true"] .corner-settings__panel {
       visibility: visible;
@@ -1009,6 +1085,27 @@
         <button id="token-action-move" class="ui-button token-action-menu__item" type="button" role="menuitem">Mover</button>
       </section>
 
+<aside id="tools-menu" class="corner-settings corner-settings--top-right tools-menu" data-open="false" aria-label="Ferramentas">
+    <button id="tools-trigger" class="ui-button--icon corner-settings__trigger" type="button"
+      aria-label="Ferramentas" aria-expanded="false" aria-controls="tools-panel" title="Ferramentas">
+      <svg class="corner-settings__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15Z"/>
+      </svg>
+    </button>
+    <section id="tools-panel" class="ui-panel corner-settings__panel tools-menu__panel" role="toolbar" aria-label="Ferramentas do mapa" aria-orientation="vertical" inert>
+      <button class="ui-tool" type="button" data-tool="ruler" aria-label="Régua — ferramenta de prioridade" aria-pressed="false" title="Régua (prioridade)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m3 16 13-13 5 5L8 21Zm10-10 2 2m-5 1 2 2m-5 1 2 2m-5 1 2 2"/>
+        </svg>
+      </button>
+      <button class="ui-tool" type="button" data-tool="heart" aria-label="Coração — ferramenta visual" aria-pressed="false" title="Coração (visual)">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 21 3.4 12.6C-2 7.2 5.4.3 10.5 5.2L12 6.7l1.5-1.5C18.6.3 26 7.2 20.6 12.6Z"/>
+        </svg>
+      </button>
+    </section>
+  </aside>
+
 <aside id="app-settings" class="corner-settings corner-settings--top-left app-settings" data-open="false" aria-label="Configurações do aplicativo">
     <button id="app-settings-trigger" class="ui-button--icon corner-settings__trigger app-settings__trigger" type="button"
       aria-label="Configurações" aria-expanded="false" aria-controls="app-settings-panel">
@@ -1094,11 +1191,11 @@
         <legend class="sr-only">Opacidade do grid</legend>
         <label id="opacity-label" for="grid-opacity">Opacidade</label>
         <section class="grid-settings__slider-row" aria-labelledby="opacity-label">
-          <input id="grid-opacity" type="range" min="0" max="100" step="1" value="24"
-            aria-valuetext="24%" aria-describedby="opacity-help">
-          <input id="grid-opacity-value" class="ui-value" type="text" inputmode="numeric" value="24"
+          <input id="grid-opacity" type="range" min="0" max="100" step="1" value="5"
+            aria-valuetext="5%" aria-describedby="opacity-help">
+          <input id="grid-opacity-value" class="ui-value" type="text" inputmode="numeric" value="5"
             role="spinbutton" aria-label="Opacidade do grid em porcentagem"
-            aria-valuemin="0" aria-valuemax="100" aria-valuenow="24" aria-valuetext="24%"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="5" aria-valuetext="5%"
             aria-describedby="opacity-help" autocomplete="off" spellcheck="false">
         </section>
         <p id="opacity-help" class="sr-only">De 0 a 100 por cento. Use o controle deslizante ou digite o valor.</p>
@@ -1158,6 +1255,16 @@
       const appSettings = document.getElementById("app-settings");
       const appSettingsTrigger = document.getElementById("app-settings-trigger");
       const appSettingsPanel = document.getElementById("app-settings-panel");
+      const toolsMenu = document.getElementById("tools-menu");
+      const toolsTrigger = document.getElementById("tools-trigger");
+      const toolsPanel = document.getElementById("tools-panel");
+      const toolButtons = [...toolsPanel.querySelectorAll("[data-tool]")];
+      // Registro único: prioridade é exclusiva; visual é um toggle independente.
+      // Futuras ferramentas devem declarar sua classificação aqui.
+      const TOOL_DEFINITIONS = Object.freeze({
+        ruler: { type: "priority" },
+        heart: { type: "visual" }
+      });
       const touchModeCheckbox = document.getElementById("touch-mode");
       const debugEnabledCheckbox = document.getElementById("debug-enabled");
       const debugDialog = document.getElementById("debug-dialog");
@@ -1251,11 +1358,14 @@
       const state = {
         open: false,
         appSettingsOpen: false,
+        toolsOpen: false,
+        activeTool: null,
+        visualTools: new Set(),
         touchMode: touchCapable,
         visible: false,
         absolute: false,
         distance: 1.5,
-        opacity: 24,
+        opacity: 5,
         size: 48,
         isMoving: false,
         moveSelectionOrder: [],
@@ -1266,6 +1376,81 @@
         cameraX: 0,
         cameraY: 0
       };
+
+      function hasPriorityTool() {
+        return TOOL_DEFINITIONS[state.activeTool]?.type === "priority";
+      }
+
+      function syncToolsUI() {
+        toolsMenu.dataset.open = String(state.toolsOpen);
+        toolsTrigger.setAttribute("aria-expanded", String(state.toolsOpen));
+        toolsPanel.inert = !state.toolsOpen;
+        document.documentElement.dataset.priorityTool = hasPriorityTool() ? state.activeTool : "";
+        toolButtons.forEach(button => {
+          const id = button.dataset.tool;
+          const type = TOOL_DEFINITIONS[id].type;
+          button.dataset.toolType = type;
+          const active = type === "visual" ? state.visualTools.has(id) : state.activeTool === id;
+          button.setAttribute("aria-pressed", String(active));
+          button.disabled = type === "priority" && state.isMoving;
+        });
+      }
+
+      function setToolsOpen(open) {
+        state.toolsOpen = Boolean(open);
+        if (!state.toolsOpen && toolsPanel.contains(document.activeElement)) {
+          toolsTrigger.focus({ preventScroll: true });
+        }
+        syncToolsUI();
+      }
+
+      function toggleTool(id) {
+        const definition = TOOL_DEFINITIONS[id];
+        if (!definition) return false;
+        if (definition.type === "visual") {
+          if (state.visualTools.has(id)) state.visualTools.delete(id);
+          else state.visualTools.add(id);
+        } else {
+          if (state.isMoving) return false;
+          cancelWorkspaceGestures("ferramenta exclusiva alterada");
+          state.activeTool = state.activeTool === id ? null : id;
+        }
+        syncToolsUI();
+        return true;
+      }
+
+      function blocksWorkspaceInput(event) {
+        if (!hasPriorityTool()) return false;
+        // Tab e os controles de canto continuam permitindo sair da ferramenta.
+        if (event.type === "keydown" && event.key === "Tab") return false;
+        const target = event.target;
+        if (target instanceof Element && target.closest(".corner-settings, dialog")) return false;
+        if (workspaceCard.contains(target)) return true;
+        return event.type === "keydown" && (event.key === "Escape" ||
+          ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(event.key.toLowerCase())));
+      }
+
+      function interceptWorkspaceInput(event) {
+        if (!blocksWorkspaceInput(event)) return;
+        if (event.type === "pointerdown") {
+          if (state.open) setOpen(false);
+          if (state.appSettingsOpen) setAppSettingsOpen(false);
+        }
+        if (event.cancelable) event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+
+      // A barreira roda antes dos handlers de tokens, câmera e multitoque.
+      // Quando houver gestos próprios da ferramenta, seu dispatcher entra aqui.
+      ["pointerdown", "pointermove", "pointerup", "pointercancel", "click", "dblclick",
+        "contextmenu", "wheel", "keydown"].forEach(type => {
+        document.addEventListener(type, interceptWorkspaceInput, { capture: true, passive: false });
+      });
+      toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
+      toolButtons.forEach(button => {
+        button.addEventListener("click", () => toggleTool(button.dataset.tool));
+      });
+      syncToolsUI();
 
       const debugEntries = [];
       const DEBUG_MAX_ENTRIES = 900;
@@ -1628,6 +1813,7 @@
       }
 
       function updateMovementHistoryUI() {
+        syncToolsUI();
         const count = movementHistory.length;
         const redoCount = movementRedoHistory.length;
         const unavailable = state.touchMode || state.isMoving || count === 0;
@@ -1693,6 +1879,7 @@
       }
 
       function undoLastMovement() {
+        if (hasPriorityTool()) return false;
         if (state.touchMode || state.isMoving || movementHistory.length === 0) {
           debugLog("history", "desfazer movimento ignorado", {
             touchMode: state.touchMode,
@@ -1749,6 +1936,7 @@
       }
 
       function redoLastMovement() {
+        if (hasPriorityTool()) return false;
         if (state.touchMode || state.isMoving || movementRedoHistory.length === 0) {
           debugLog("history", "refazer movimento ignorado", {
             touchMode: state.touchMode,
@@ -2249,6 +2437,7 @@
       }
 
       function executeMoveSelection() {
+        if (hasPriorityTool()) return;
         if (!canExecuteMoveSelection() || state.isMoving) {
           const canExecute = canExecuteMoveSelection();
           debugLog("move", "movimento ignorado", { canExecute, isMoving: state.isMoving });
@@ -2299,6 +2488,7 @@
       }
 
       function undoGridPointOrClearSelection() {
+        if (hasPriorityTool()) return false;
         if (removeLastGridPoint()) {
           debugLog("action", "undo: último destino removido");
           return true;
@@ -3016,13 +3206,13 @@
       }
 
       function isCanvasGestureTarget(target) {
-        return target instanceof Element &&
+        return !hasPriorityTool() && target instanceof Element &&
           cameraViewport.contains(target) &&
           !target.closest('[data-type="token"], .corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
       }
 
       function isCameraGestureTarget(target) {
-        return target instanceof Element &&
+        return !hasPriorityTool() && target instanceof Element &&
           cameraViewport.contains(target) &&
           !target.closest('.corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
       }
@@ -4126,7 +4316,7 @@
           closeTokenActionMenu();
           handled = true;
         }
-        if (hasSelectedToken() && !state.touchMode) {
+        if (hasSelectedToken() && !state.touchMode && !hasPriorityTool()) {
           clearTokenSelection();
           handled = true;
         }
