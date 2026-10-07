@@ -136,6 +136,7 @@
       --z-workspace: 0;
       --z-controls: 10;
       --z-ruler: 9;
+      --z-token-status: 12;
       --z-dialog: 100;
       --z-tooltip: 110;
     }
@@ -582,6 +583,19 @@
       .ruler-layer__line { stroke: Highlight; }
       .ruler-layer__value { color: Highlight; background: none; }
     }
+    .token-status-layer { position: absolute; inset: 0; z-index: var(--z-token-status); pointer-events: none; }
+    .token-status {
+      position: absolute;
+      width: 10.5rem;
+      padding: var(--space-3) var(--space-4);
+      pointer-events: auto;
+      animation: token-status-reveal var(--duration-menu) var(--ease-interface);
+    }
+    .token-status__name { margin: 0 0 var(--space-2); color: var(--color-text-subtle); font-size: var(--font-size-small); font-weight: 500; }
+    .token-status__data { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4); margin: 0; font-size: var(--font-size-label); }
+    .token-status__data dt { color: var(--color-text-muted); }
+    .token-status__data dd { margin: 0; text-align: right; color: var(--color-highlight); }
+    @keyframes token-status-reveal { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: scale(1); } }
     .token-lasso {
       position: absolute;
       inset: 0;
@@ -1133,6 +1147,7 @@
         </svg>
       </section>
 
+      <div id="token-status-layer" class="token-status-layer" aria-label="Status dos tokens"></div>
       <section id="token-action-menu" class="ui-panel token-action-menu" role="menu" aria-label="Ações dos tokens selecionados" hidden>
         <button id="token-action-move" class="ui-button token-action-menu__item" type="button" role="menuitem">Mover</button>
       </section>
@@ -1380,6 +1395,124 @@
       }
 
       const tokens = [...workspaceLayers.querySelectorAll('[data-type="token"]')];
+      // Identidade canônica separada da posição, seleção e atributos visuais.
+      // O ID é imutável; vida/status permanecem editáveis para recursos futuros.
+      const tokenIds = new WeakMap();
+      const tokenData = new Map();
+      const tokenStatusPanels = new Map();
+      const tokenStatusLayer = document.getElementById("token-status-layer");
+      const tokenLifeFormat = new Intl.NumberFormat("pt-BR");
+      let tokenStatusFrame = 0;
+      let statusLongClickToken = null;
+      let statusLongClickUntil = 0;
+
+      function registerTokenData(token) {
+        if (tokenIds.has(token)) return getTokenInfo(token);
+        const id = token.dataset.tokenId;
+        if (!id || tokenData.has(id)) throw new Error("ID de token ausente ou duplicado");
+        const info = { life: 10000, status: "Normal" };
+        Object.defineProperty(info, "id", { value: id, enumerable: true });
+        tokenIds.set(token, id);
+        tokenData.set(id, info);
+        return info;
+      }
+
+      function getTokenInfo(token) {
+        return tokenData.get(tokenIds.get(token));
+      }
+
+      function openStatusForToken(token) {
+        const selected = getSelectedTokensInNumberOrder();
+        const targets = selected.length > 1 ? selected : [token];
+        targets.forEach(openTokenStatus);
+      }
+
+      function openTokenStatus(token) {
+        const info = getTokenInfo(token);
+        if (!info) return;
+        let panel = tokenStatusPanels.get(info.id);
+        if (!panel) {
+          const element = document.createElement("section");
+          element.className = "ui-panel token-status";
+          element.setAttribute("role", "region");
+          element.setAttribute("aria-label", `Status do token ${info.id}`);
+          const name = document.createElement("h2");
+          name.className = "token-status__name";
+          name.textContent = info.id;
+          const data = document.createElement("dl");
+          data.className = "token-status__data";
+          const lifeTitle = document.createElement("dt");
+          lifeTitle.textContent = "Vida:";
+          const life = document.createElement("dd");
+          const statusTitle = document.createElement("dt");
+          statusTitle.textContent = "Status:";
+          const status = document.createElement("dd");
+          data.append(lifeTitle, life, statusTitle, status);
+          element.append(name, data);
+          tokenStatusLayer.append(element);
+          panel = { token, element, life, status };
+          tokenStatusPanels.set(info.id, panel);
+        }
+        panel.life.textContent = tokenLifeFormat.format(info.life);
+        panel.status.textContent = info.status;
+        positionTokenStatusPanels();
+      }
+
+      function getTokenStatusPosition(anchor, width, height, bounds, occupied) {
+        const gap = 10;
+        const centerX = (anchor.left + anchor.right) / 2;
+        const centerY = (anchor.top + anchor.bottom) / 2;
+        const candidates = [
+          { x: anchor.right + gap, y: centerY - height / 2 },
+          { x: anchor.left - width - gap, y: centerY - height / 2 },
+          { x: centerX - width / 2, y: anchor.top - height - gap },
+          { x: centerX - width / 2, y: anchor.bottom + gap }
+        ];
+        for (let step = 1; step <= occupied.length; step += 1) {
+          for (const direction of [-1, 1]) candidates.push({ x: anchor.right + gap, y: centerY - height / 2 + direction * step * (height + gap) });
+        }
+        let best = null, bestCost = Infinity;
+        for (const candidate of candidates) {
+          const x = clamp(candidate.x, 8, Math.max(8, bounds.width - width - 8));
+          const y = clamp(candidate.y, 8, Math.max(8, bounds.height - height - 8));
+          const overlap = occupied.reduce((area, other) => area +
+            Math.max(0, Math.min(x + width, other.x + other.width) - Math.max(x, other.x)) *
+            Math.max(0, Math.min(y + height, other.y + other.height) - Math.max(y, other.y)), 0);
+          const cost = overlap * 1000 + Math.hypot(x - candidate.x, y - candidate.y) + Math.hypot(x + width / 2 - centerX, y + height / 2 - centerY);
+          if (cost < bestCost) { bestCost = cost; best = { x, y, width, height }; }
+        }
+        return best;
+      }
+
+      function positionTokenStatusPanels() {
+        tokenStatusFrame = 0;
+        const card = workspaceCard.getBoundingClientRect();
+        const occupied = [];
+        tokenStatusPanels.forEach(panel => {
+          const rect = panel.token.getBoundingClientRect();
+          const anchor = { left: rect.left - card.left, right: rect.right - card.left, top: rect.top - card.top, bottom: rect.bottom - card.top };
+          const position = getTokenStatusPosition(anchor, panel.element.offsetWidth, panel.element.offsetHeight,
+            { width: workspaceCard.clientWidth, height: workspaceCard.clientHeight }, occupied);
+          panel.element.style.left = `${position.x}px`;
+          panel.element.style.top = `${position.y}px`;
+          panel.element.style.transformOrigin = `${clamp((anchor.left + anchor.right) / 2 - position.x, 0, position.width)}px ${clamp((anchor.top + anchor.bottom) / 2 - position.y, 0, position.height)}px`;
+          occupied.push(position);
+        });
+        if (state.isMoving && tokenStatusPanels.size) scheduleTokenStatusPositions();
+      }
+
+      function scheduleTokenStatusPositions() {
+        if (tokenStatusPanels.size && !tokenStatusFrame) tokenStatusFrame = requestAnimationFrame(positionTokenStatusPanels);
+      }
+
+      function closeAllTokenStatus() {
+        tokenStatusPanels.forEach(panel => panel.element.remove());
+        tokenStatusPanels.clear();
+        if (tokenStatusFrame) cancelAnimationFrame(tokenStatusFrame);
+        tokenStatusFrame = 0;
+      }
+
+      tokens.forEach(registerTokenData);
       if (!TOKEN_RESIZE_ENABLED) {
         tokens.forEach((token, index) => {
           token.setAttribute("aria-label", `Token Soldados ${String(index + 1).padStart(2, "0")}. Clique para selecionar.`);
@@ -1598,6 +1731,24 @@
       });
 
       // A barreira roda antes dos handlers de tokens, câmera e multitoque.
+      // Consulta é não modal: um clique fora fecha todas, mas soltar um clique
+      // longo não conta como clique fora das janelas que ele acabou de abrir.
+      document.addEventListener("click", event => {
+        if (!tokenStatusPanels.size || event.target.closest?.(".token-status")) return;
+        const token = event.target.closest?.('[data-type="token"]');
+        if (token && token === statusLongClickToken && performance.now() <= statusLongClickUntil) {
+          statusLongClickToken = null;
+          return;
+        }
+        closeAllTokenStatus();
+      }, true);
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && tokenStatusPanels.size) {
+          closeAllTokenStatus();
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
       // O dispatcher da régua recebe o gesto sem liberar os handlers do mapa.
       ["pointerdown", "pointermove", "pointerup", "pointercancel", "click", "dblclick",
         "contextmenu", "wheel", "keydown"].forEach(type => {
@@ -1859,6 +2010,7 @@
       function renderCameraTransform() {
         cameraTransformFrame = 0;
         cameraStage.style.transform = `translate(${state.cameraX}px, ${state.cameraY}px) scale(${state.cameraZoom})`;
+        scheduleTokenStatusPositions();
       }
 
       function scheduleCameraTransform() {
@@ -2153,6 +2305,7 @@
       }
 
       function updateTokenGeometry(token) {
+        scheduleTokenStatusPositions();
         const cellSize = state.size;
         const origin = getGridOrigin(cellSize);
         const tokenGrid = getTokenGridState(token);
@@ -2742,48 +2895,88 @@
       const tokenTapCandidates = new Map();
       const TOKEN_TAP_MOVE_TOLERANCE = 12;
 
+      const TOKEN_STATUS_HOLD_MS = 400;
+
+      function releaseTokenPressPointer(candidate) {
+        try {
+          if (candidate.token.hasPointerCapture?.(candidate.pointerId)) candidate.token.releasePointerCapture(candidate.pointerId);
+        } catch {}
+      }
+
+      function cancelTokenPress(pointerId) {
+        const candidate = tokenTapCandidates.get(pointerId);
+        if (!candidate) return;
+        tokenTapCandidates.delete(pointerId);
+        window.clearTimeout(candidate.holdTimer);
+        releaseTokenPressPointer(candidate);
+      }
+
+      function cancelAllTokenPresses() {
+        [...tokenTapCandidates.keys()].forEach(cancelTokenPress);
+      }
+
+      function beginTokenPress(event, token) {
+        if (!event.isPrimary || event.button !== 0 || state.isMoving || hasPriorityTool()) return;
+        if (event.target.closest(".token__resize-handle")) return;
+        if (event.pointerType === "touch" && touchDeselectPointers.size > 1) return;
+        cancelTokenPress(event.pointerId);
+        const candidate = {
+          token, pointerId: event.pointerId, pointerType: event.pointerType,
+          startX: event.clientX, startY: event.clientY, valid: true, held: false, holdTimer: 0
+        };
+        tokenTapCandidates.set(event.pointerId, candidate);
+        try { token.setPointerCapture?.(event.pointerId); } catch {}
+        candidate.holdTimer = window.setTimeout(() => {
+          if (tokenTapCandidates.get(event.pointerId) !== candidate || !candidate.valid ||
+            state.isMoving || hasPriorityTool() || (candidate.pointerType === "touch" && touchDeselectPointers.size > 1)) return;
+          candidate.held = true;
+          openStatusForToken(token);
+        }, TOKEN_STATUS_HOLD_MS);
+      }
+
+      function moveTokenPress(event) {
+        const candidate = tokenTapCandidates.get(event.pointerId);
+        if (!candidate) return;
+        if (event.pointerType === "mouse" && !(event.buttons & 1)) { cancelTokenPress(event.pointerId); return; }
+        const dx = event.clientX - candidate.startX;
+        const dy = event.clientY - candidate.startY;
+        if (dx * dx + dy * dy > TOKEN_TAP_MOVE_TOLERANCE ** 2) {
+          candidate.valid = false;
+          window.clearTimeout(candidate.holdTimer);
+        }
+      }
+
+      function endTokenPress(event) {
+        const candidate = tokenTapCandidates.get(event.pointerId);
+        if (!candidate) return;
+        const rect = candidate.token.getBoundingClientRect();
+        const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        cancelTokenPress(event.pointerId);
+        if (candidate.held) {
+          statusLongClickToken = candidate.token;
+          statusLongClickUntil = performance.now() + 600;
+        } else if (candidate.valid && inside && !state.isMoving && !hasPriorityTool()) {
+          closeAllTokenStatus();
+          toggleTokenSelection(candidate.token);
+        }
+      }
+
+      workspaceCard.addEventListener("pointerdown", event => {
+        const token = event.target.closest?.('[data-type="token"]');
+        if (token && tokens.includes(token)) beginTokenPress(event, token);
+      });
+      workspaceCard.addEventListener("pointermove", moveTokenPress);
+      workspaceCard.addEventListener("pointerup", endTokenPress);
+      workspaceCard.addEventListener("pointercancel", event => cancelTokenPress(event.pointerId));
+
       tokens.forEach(token => {
         token.setAttribute("aria-pressed", "false");
-        token.addEventListener("pointerdown", event => {
-          const hitHandle = event.target.closest(".token__resize-handle");
-          if (hitHandle || event.button !== 0 || state.isMoving) return;
-
-          if (event.pointerType === "touch" && state.touchMode) {
-            if (touchDeselectPointers.size > 1) return;
-            tokenTapCandidates.set(event.pointerId, {
-              token,
-              startX: event.clientX,
-              startY: event.clientY,
-              valid: true
-            });
+        token.addEventListener("contextmenu", event => {
+          if (tokenTapCandidates.get(event.pointerId)?.held || [...tokenTapCandidates.values()].some(candidate => candidate.token === token && candidate.held)) {
+            event.preventDefault();
+            event.stopPropagation();
             return;
           }
-
-          toggleTokenSelection(token);
-        });
-
-        token.addEventListener("pointermove", event => {
-          const candidate = tokenTapCandidates.get(event.pointerId);
-          if (!candidate) return;
-          const dx = event.clientX - candidate.startX;
-          const dy = event.clientY - candidate.startY;
-          if (dx * dx + dy * dy > TOKEN_TAP_MOVE_TOLERANCE * TOKEN_TAP_MOVE_TOLERANCE) {
-            candidate.valid = false;
-          }
-        });
-
-        token.addEventListener("pointerup", event => {
-          const candidate = tokenTapCandidates.get(event.pointerId);
-          if (!candidate) return;
-          tokenTapCandidates.delete(event.pointerId);
-          if (candidate.valid) toggleTokenSelection(candidate.token);
-        });
-
-        token.addEventListener("pointercancel", event => {
-          tokenTapCandidates.delete(event.pointerId);
-        });
-
-        token.addEventListener("contextmenu", event => {
           if (performance.now() < suppressContextMenuUntil) {
             event.preventDefault();
             event.stopPropagation();
@@ -2800,7 +2993,10 @@
           }
         });
         token.addEventListener("keydown", event => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (event.key === "Enter" && event.shiftKey) {
+            event.preventDefault();
+            openStatusForToken(token);
+          } else if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             toggleTokenSelection(token);
           } else if (TOKEN_RESIZE_ENABLED && (event.key === "+" || event.key === "=")) {
@@ -3368,13 +3564,13 @@
       function isCanvasGestureTarget(target) {
         return !hasPriorityTool() && target instanceof Element &&
           cameraViewport.contains(target) &&
-          !target.closest('[data-type="token"], .corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
+          !target.closest('[data-type="token"], .corner-settings, .token-action-menu, .token-status, dialog, input, button, select, textarea, a');
       }
 
       function isCameraGestureTarget(target) {
         return !hasPriorityTool() && target instanceof Element &&
           cameraViewport.contains(target) &&
-          !target.closest('.corner-settings, .token-action-menu, dialog, input, button, select, textarea, a');
+          !target.closest('.corner-settings, .token-action-menu, .token-status, dialog, input, button, select, textarea, a');
       }
 
       function localPoint(event) {
@@ -3749,7 +3945,7 @@
             // Cancela qualquer ação de um dedo que tenha começado nos poucos
             // milissegundos anteriores à entrada do segundo dedo.
             cancelPendingCanvasInteractions({ cancelFormation: true });
-            tokenTapCandidates.clear();
+            cancelAllTokenPresses();
             cancelActiveLasso();
             closeTokenActionMenu();
             if (event.cancelable) event.preventDefault();
@@ -3898,7 +4094,7 @@
           if (lastAt - firstAt <= THREE_FINGER_JOIN_MS && pointers.every(pointer => !pointer.moved)) {
             threeFingerGestureLatched = true;
             if (touchDeselectCandidate) touchDeselectCandidate.valid = false;
-            tokenTapCandidates.clear();
+            cancelAllTokenPresses();
             cancelPendingCanvasInteractions();
             cancelActiveLasso();
             if (event.cancelable) event.preventDefault();
@@ -3952,7 +4148,8 @@
         const pending = canvasTapCandidates.get(event.pointerId);
         if (pending) window.clearTimeout(pending.holdTimer);
         canvasTapCandidates.delete(event.pointerId);
-        tokenTapCandidates.delete(event.pointerId);
+        cancelTokenPress(event.pointerId);
+        if (workspaceCard.hasPointerCapture?.(event.pointerId)) return;
         if (event.pointerType !== "touch" || !touchDeselectPointers.has(event.pointerId)) return;
         // No pointerup normal a entrada já foi removida antes deste evento.
         // Se ainda está no mapa, a captura foi perdida inesperadamente.
@@ -3980,7 +4177,7 @@
         cancelActiveLasso();
         cancelBlockProjection();
         resetTouchPairState(reason);
-        tokenTapCandidates.clear();
+        cancelAllTokenPresses();
         threeFingerPointers.clear();
         threeFingerGestureLatched = false;
         desktopCameraPan = null;
@@ -4081,7 +4278,7 @@
       // há deslocamento com o botão direito pressionado o grupo é projetado.
       workspaceCard.addEventListener("pointerdown", event => {
         if (state.touchMode || event.pointerType === "touch" || event.button !== 2 || !hasSelectedToken() || desktopCameraPan) return;
-        if (event.target.closest('.corner-settings, .token-action-menu, dialog, input, button, select, textarea, a')) return;
+        if (event.target.closest('.corner-settings, .token-action-menu, .token-status, dialog, input, button, select, textarea, a')) return;
         desktopBlockCandidate = {
           pointerId: event.pointerId,
           startX: event.clientX,

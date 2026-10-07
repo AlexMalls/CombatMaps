@@ -64,7 +64,7 @@ test('Escape from a corner control preserves map selection while a priority tool
   c.clearTokenSelection=()=>{c.selectedToken.selected=false};
   c.desktopCameraPan=null;c.blockProjectionSession=null;c.lassoSession=null;c.tokenActionMenu={hidden:true};
   c.document.addEventListener=(type,fn)=>{c.keydown=fn};
-  const start=script.indexOf('      document.addEventListener("keydown", event => {');
+  const start=script.indexOf('      document.addEventListener("keydown", event => {\n        if (state.debugEnabled)');
   const end=script.indexOf('      setDebugEnabled(true);',start);
   vm.runInContext(script.slice(start,end),c);
   const target=vm.runInContext('new Element()',c);target.closest=()=>null;

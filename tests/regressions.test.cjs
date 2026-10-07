@@ -71,7 +71,7 @@ function gestureContext() {
     canvasTapCandidates:new Map(),tokenTapCandidates:new Map(),lastCanvasPress:{},
     formationSession:null,lassoSession:null,touchBlockRenderFrame:0,pendingTouchBlockCentroid:null,
     cancelAnimationFrame(){},threeFingerPointers:new Map(),threeFingerGestureLatched:false,
-    stopMagicTrail(){},finishRulerMeasurement(){},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
+    stopMagicTrail(){},finishRulerMeasurement(){},cancelAllTokenPresses(){ctx.tokenTapCandidates.clear()},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
     movementGuidesLayer:{dataset:{}},lasso:{dataset:{}},lassoPath:{setAttribute(){}},
     closeTokenActionMenu(){},finishDesktopCameraPan(){ctx.desktopCameraPan=null},
     moveLasso(){},finishLasso(){},cancelLasso(){}
@@ -134,7 +134,7 @@ test('grid control reflects the fitted size and writes the bounded positions to 
     style:{setProperty(){}},querySelector:()=>null}));
   const ctx=vm.createContext({tokens,state:{size:48,isMoving:false},appliedWorkspaceGeometry:'',
     workspaceLayers:{clientWidth:340,clientHeight:740},grid:{style:{setProperty(){}}},
-    document:{getElementById:id=>elements.get(id)},cancelWorkspaceGestures(){},
+    document:{getElementById:id=>elements.get(id)},cancelWorkspaceGestures(){},scheduleTokenStatusPositions(){},
     clearAllGridPoints(){},clearMovementHistory(){},updateTokenSelectionNumbers(){},updateGridPointMarkers(){}});
   for(const name of ['parseNumber','createNumericControl','gridFootprintsOverlap','planWorkspaceLayout',
     'getGridOrigin','getTokenGridState','constrainWorkspaceCell','applyWorkspaceLayout','updateTokenGeometry','updateAllTokens'])
