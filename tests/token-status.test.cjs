@@ -143,6 +143,8 @@ test('status visuals are independent of movement selection, reused on reopen and
   c.tokenStatusLayer=makeNode();c.tokenStatusLinks=makeNode();c.tokenStatusSpectra=makeNode();
   c.tokenStatusPanels=new Map();c.tokenLifeFormat=new Intl.NumberFormat('pt-BR');
   c.positionTokenStatusPanels=()=>{};c.finishTokenStatusDrag=()=>{};c.tokenStatusFrame=0;
+  c.a.style={setProperty(){}};
+  vm.runInContext(source('getTokenDamagePercent')+source('updateTokenHealthVisuals'),c);
   vm.runInContext(source('openTokenStatus')+source('closeAllTokenStatus'),c);
   vm.runInContext('openTokenStatus(a);openTokenStatus(a)',c);
   assert.equal(c.tokenStatusPanels.size,1);assert.equal(c.tokenStatusLinks.children.length,2);
@@ -153,4 +155,26 @@ test('status visuals are independent of movement selection, reused on reopen and
   assert.equal(c.tokenStatusPanels.size,0);
   for(const node of [panel.element,panel.link,panel.outline,panel.spectrum])assert.equal(node.removed,true);
   assert.equal(c.a.dataset.selected,'false');
+});
+
+test('health changes affect only the matching token, clamp at zero and reverse its damage overlay',()=>{
+  const c=setup();c.tokenStatusPanels=new Map();c.scheduleTokenStatusPositions=()=>{};
+  const css=new Map();c.a.style={setProperty:(key,value)=>css.set(key,value)};c.b.style={setProperty(){}};
+  c.tokenLifeFormat=new Intl.NumberFormat('pt-BR');
+  const panel={life:{},subtract:{}};c.tokenStatusPanels.set('soldados-01',panel);
+  for(const name of ['getTokenDamagePercent','updateTokenHealthVisuals','changeTokenLife'])vm.runInContext(source(name),c);
+  for(let i=0;i<5;i++)vm.runInContext('changeTokenLife(a,-1000)',c);
+  assert.equal(vm.runInContext('getTokenInfo(a).life',c),5000);assert.equal(css.get('--token-life-remaining'),'50%');
+  assert.equal(panel.life.textContent,'5.000');assert.equal(vm.runInContext('getTokenInfo(b).life',c),10000);
+  for(let i=0;i<6;i++)vm.runInContext('changeTokenLife(a,-1000)',c);
+  assert.equal(vm.runInContext('getTokenInfo(a).life',c),0);assert.equal(css.get('--token-life-remaining'),'0%');assert.equal(panel.subtract.disabled,true);
+  vm.runInContext('changeTokenLife(a,1000)',c);assert.equal(css.get('--token-life-remaining'),'10%');assert.equal(panel.subtract.disabled,false);
+  for(let i=0;i<12;i++)vm.runInContext('changeTokenLife(a,1000)',c);
+  assert.equal(vm.runInContext('getTokenInfo(a).life',c),13000);assert.equal(css.get('--token-life-remaining'),'100%');
+});
+test('health buttons do not begin a status-card drag',()=>{
+  const c=setup();c.tokenStatusDrag=null;c.panel={position:{x:0,y:0},element:{}};
+  c.e=c.event(1,{target:{closest:()=>({tagName:'BUTTON'})},stopPropagation(){},preventDefault(){throw Error('button click prevented')}});
+  vm.runInContext(source('beginTokenStatusDrag')+'beginTokenStatusDrag(e,panel)',c);
+  assert.equal(c.tokenStatusDrag,null);
 });
