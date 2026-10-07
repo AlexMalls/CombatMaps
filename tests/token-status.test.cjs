@@ -95,17 +95,21 @@ test('context menus during a hold cannot bubble into map selection actions',()=>
   assert.equal(prevented,true);assert.equal(stopped,true);
 });
 
-test('connector joins token and card edges in all directions and hides when overlapping',()=>{
+test('connector reaches behind the card in all directions and hides when overlapping',()=>{
   const c=setup();vm.runInContext(source('clamp')+source('getTokenStatusLink'),c);
   c.anchor={left:100,right:140,top:100,bottom:140};
   for(const [panel,expected] of [
-    [{x:160,y:80,width:100,height:80},[140,120,160,120]],
-    [{x:0,y:80,width:80,height:80},[100,120,80,120]],
-    [{x:80,y:0,width:80,height:80},[120,100,120,80]],
-    [{x:80,y:160,width:80,height:80},[120,140,120,160]]]){
+    [{x:160,y:80,width:100,height:80},[140,120,210,120]],
+    [{x:0,y:80,width:80,height:80},[100,120,40,120]],
+    [{x:80,y:0,width:80,height:80},[120,100,120,40]],
+    [{x:80,y:160,width:80,height:80},[120,140,120,200]]]){
     c.panel=panel;const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
     assert.deepEqual([r.x1,r.y1,r.x2,r.y2],expected);
   }
+  c.panel={x:0,y:180,width:80,height:80};
+  const diagonal=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
+  assert.equal(diagonal.x2,40);assert.equal(diagonal.y2,220);
+  assert.equal(diagonal.x1,104);assert.equal(diagonal.y1,140);
   c.panel={x:80,y:80,width:80,height:80};const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
   assert.equal(r.x1,r.x2);assert.equal(r.y1,r.y2);
 });

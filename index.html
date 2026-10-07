@@ -1566,8 +1566,9 @@
       function getTokenStatusLink(anchor, panel) {
         const centerX = (anchor.left + anchor.right) / 2;
         const centerY = (anchor.top + anchor.bottom) / 2;
-        const x2 = clamp(centerX, panel.x, panel.x + panel.width);
-        const y2 = clamp(centerY, panel.y, panel.y + panel.height);
+        // A conexão avança atrás do card para não parar antes dos cantos arredondados.
+        const x2 = panel.x + panel.width / 2;
+        const y2 = panel.y + panel.height / 2;
         const dx = x2 - centerX, dy = y2 - centerY;
         const ratio = Math.max(Math.abs(dx) / Math.max(1, (anchor.right - anchor.left) / 2),
           Math.abs(dy) / Math.max(1, (anchor.bottom - anchor.top) / 2));
