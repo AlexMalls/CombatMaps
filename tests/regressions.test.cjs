@@ -71,7 +71,7 @@ function gestureContext() {
     canvasTapCandidates:new Map(),tokenTapCandidates:new Map(),lastCanvasPress:{},
     formationSession:null,lassoSession:null,touchBlockRenderFrame:0,pendingTouchBlockCentroid:null,
     cancelAnimationFrame(){},threeFingerPointers:new Map(),threeFingerGestureLatched:false,
-    stopMagicTrail(){},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
+    stopMagicTrail(){},finishRulerMeasurement(){},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
     movementGuidesLayer:{dataset:{}},lasso:{dataset:{}},lassoPath:{setAttribute(){}},
     closeTokenActionMenu(){},finishDesktopCameraPan(){ctx.desktopCameraPan=null},
     moveLasso(){},finishLasso(){},cancelLasso(){}

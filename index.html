@@ -58,6 +58,8 @@
       --color-magic-gold: #efda99;
       --color-magic-halo: rgb(143 188 255 / 24%);
       --tool-visual-inactive-opacity: 0.2;
+      --ruler-line-width: 2px;
+      --ruler-label-size: 1rem;
       --color-selection: rgb(172 214 198 / 24%);
       --color-move-target: #f29a49;
       --color-move-target-soft: rgb(242 154 73 / 10%);
@@ -133,6 +135,7 @@
       --duration-menu: 340ms;
       --z-workspace: 0;
       --z-controls: 10;
+      --z-ruler: 9;
       --z-dialog: 100;
       --z-tooltip: 110;
     }
@@ -531,6 +534,54 @@
     }
 
     /* LAYER DE INTERAÇÃO — laço livre para seleção múltipla de tokens. */
+    /* Medição: camada de tela independente da câmera e dos objetos do mapa. */
+    .ruler-layer {
+      position: absolute;
+      inset: 0;
+      z-index: var(--z-ruler);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+    }
+    .ruler-layer[data-active="true"] { opacity: 1; visibility: visible; }
+    .ruler-layer__canvas { width: 100%; height: 100%; overflow: visible; }
+    .ruler-layer__line {
+      stroke: url(#ruler-spectrum);
+      stroke-width: var(--ruler-line-width);
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 3px var(--color-magic-halo));
+    }
+    .ruler-spectrum stop { animation: ruler-stop-flow 8s linear infinite; }
+    .ruler-spectrum stop:nth-child(1) { stop-color: var(--color-magic-pink); }
+    .ruler-spectrum stop:nth-child(2) { stop-color: var(--color-magic-blue); animation-delay: -2s; }
+    .ruler-spectrum stop:nth-child(3) { stop-color: var(--color-magic-cyan); animation-delay: -4s; }
+    .ruler-spectrum stop:nth-child(4) { stop-color: var(--color-magic-gold); animation-delay: -6s; }
+    .ruler-layer__value {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      font-size: var(--ruler-label-size);
+      font-weight: 600;
+      line-height: 1.25;
+      background: linear-gradient(90deg, var(--color-magic-pink), var(--color-magic-blue), var(--color-magic-cyan), var(--color-magic-gold), var(--color-magic-pink));
+      background-size: 250% 100%;
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 3px var(--color-magic-halo));
+      animation: ruler-value-flow 8s ease-in-out infinite alternate;
+    }
+    @keyframes ruler-stop-flow {
+      0%, 100% { stop-color: var(--color-magic-pink); }
+      25% { stop-color: var(--color-magic-blue); }
+      50% { stop-color: var(--color-magic-cyan); }
+      75% { stop-color: var(--color-magic-gold); }
+    }
+    @keyframes ruler-value-flow { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+    @media (forced-colors: active) {
+      .ruler-layer__line { stroke: Highlight; }
+      .ruler-layer__value { color: Highlight; background: none; }
+    }
     .token-lasso {
       position: absolute;
       inset: 0;
@@ -1042,7 +1093,7 @@
       <div class="background-layer" aria-hidden="true"></div>
 
       <!-- LAYER 1: GRID — independente do background. -->
-      <div id="workspace-grid" class="workspace-grid" data-visible="false" aria-hidden="true"></div>
+      <div id="workspace-grid" class="workspace-grid" data-visible="true" aria-hidden="true"></div>
 
       <!-- LAYER 2+: objetos/mapas/tokens futuros entram aqui, nunca no background. -->
       <section id="workspace-layers" class="workspace-layers" aria-label="Camadas de edição">
@@ -1066,6 +1117,17 @@
         </div>
 
         <!-- LAYER DE INTERAÇÃO: fica fora da câmera para seguir o dedo em coordenadas de tela. -->
+        <div id="ruler-layer" class="ruler-layer" data-active="false" aria-hidden="true">
+          <svg class="ruler-layer__canvas" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="ruler-spectrum" class="ruler-spectrum" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"/><stop offset="33%"/><stop offset="67%"/><stop offset="100%"/>
+              </linearGradient>
+            </defs>
+            <line id="ruler-line" class="ruler-layer__line" x1="0" y1="0" x2="0" y2="0"/>
+          </svg>
+          <span id="ruler-value" class="ruler-layer__value"></span>
+        </div>
         <svg id="token-lasso" class="token-lasso" data-active="false" aria-hidden="true">
           <path id="token-lasso-path" class="token-lasso__path" d=""></path>
         </svg>
@@ -1158,7 +1220,7 @@
     <section id="grid-panel" class="ui-panel corner-settings__panel grid-settings__panel" aria-label="Configurações do grid" inert>
       <label class="ui-check" for="grid-visible">
         <span>Mostrar grid</span>
-        <input id="grid-visible" type="checkbox">
+        <input id="grid-visible" type="checkbox" checked>
       </label>
       <hr>
       <fieldset class="grid-settings__control">
@@ -1249,6 +1311,13 @@
       const toolsTrigger = document.getElementById("tools-trigger");
       const toolsPanel = document.getElementById("tools-panel");
       const toolButtons = [...toolsPanel.querySelectorAll("[data-tool]")];
+      const rulerLayer = document.getElementById("ruler-layer");
+      const rulerLine = document.getElementById("ruler-line");
+      const rulerGradient = document.getElementById("ruler-spectrum");
+      const rulerLabel = document.getElementById("ruler-value");
+      const rulerNumberFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+      let rulerSession = null;
+      let rulerFrame = 0;
       // Registro único: prioridade é exclusiva; visual é um toggle independente.
       // Futuras ferramentas devem declarar sua classificação aqui.
       const TOOL_DEFINITIONS = Object.freeze({
@@ -1352,7 +1421,7 @@
         activeTool: null,
         visualTools: new Set(),
         touchMode: touchCapable,
-        visible: false,
+        visible: true,
         absolute: false,
         distance: 1.5,
         opacity: 5,
@@ -1421,17 +1490,115 @@
       }
 
       function interceptWorkspaceInput(event) {
-        if (!blocksWorkspaceInput(event)) return;
+        if (!ownsRulerPointer(event) && !blocksWorkspaceInput(event)) return;
         if (event.type === "pointerdown") {
           if (state.open) setOpen(false);
           if (state.appSettingsOpen) setAppSettingsOpen(false);
         }
         if (event.cancelable) event.preventDefault();
         event.stopImmediatePropagation();
+        dispatchRulerInput(event);
       }
 
+      function getRulerDistance(start, end, unit) {
+        const steps = Math.max(Math.abs(end.col - start.col), Math.abs(end.row - start.row));
+        return Number((steps * unit).toFixed(10));
+      }
+
+      function getRulerLabelPosition(start, end, width, height, gap = 12) {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+        // Inclinação e tamanho do texto entram na folga para nunca cruzar a linha.
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          midpoint.y -= height / 2 + gap + (dx ? Math.abs(dy / dx) * width / 2 : 0);
+        } else {
+          midpoint.x -= width / 2 + gap + Math.abs(dx / dy) * height / 2;
+        }
+        return midpoint;
+      }
+
+      function rulerGridPointAtClient(clientX, clientY) {
+        const point = clientToWorkspaceLayer(clientX, clientY);
+        const cell = state.size;
+        const origin = getGridOrigin(cell);
+        const col = clamp(Math.floor((point.x - origin.x) / cell),
+          Math.ceil(-origin.x / cell), Math.floor((workspaceLayers.clientWidth - origin.x - cell) / cell));
+        const row = clamp(Math.floor((point.y - origin.y) / cell),
+          Math.ceil(-origin.y / cell), Math.floor((workspaceLayers.clientHeight - origin.y - cell) / cell));
+        return { col, row, x: origin.x + (col + 0.5) * cell, y: origin.y + (row + 0.5) * cell };
+      }
+
+      function renderRulerMeasurement() {
+        rulerFrame = 0;
+        const session = rulerSession;
+        if (!session) return;
+        const toScreen = point => ({
+          x: point.x * state.cameraZoom + state.cameraX,
+          y: point.y * state.cameraZoom + state.cameraY
+        });
+        const start = toScreen(session.start);
+        const end = toScreen(session.end);
+        for (const element of [rulerLine, rulerGradient]) {
+          element.setAttribute("x1", start.x);
+          element.setAttribute("y1", start.y);
+          element.setAttribute("x2", end.x);
+          element.setAttribute("y2", end.y);
+        }
+        rulerLabel.textContent = rulerNumberFormat.format(getRulerDistance(session.start, session.end, state.distance));
+        const label = getRulerLabelPosition(start, end, rulerLabel.offsetWidth, rulerLabel.offsetHeight);
+        rulerLabel.style.left = `${label.x}px`;
+        rulerLabel.style.top = `${label.y}px`;
+      }
+
+      function scheduleRulerMeasurement() {
+        if (!rulerFrame) rulerFrame = requestAnimationFrame(renderRulerMeasurement);
+      }
+
+      function finishRulerMeasurement() {
+        const session = rulerSession;
+        rulerSession = null;
+        if (rulerFrame) cancelAnimationFrame(rulerFrame);
+        rulerFrame = 0;
+        rulerLayer.dataset.active = "false";
+        rulerLabel.textContent = "";
+        if (session) releaseWorkspacePointer(session.pointerId);
+      }
+
+      function ownsRulerPointer(event) {
+        return Boolean(rulerSession && rulerSession.pointerId === event.pointerId &&
+          ["pointermove", "pointerup", "pointercancel"].includes(event.type));
+      }
+
+      function dispatchRulerInput(event) {
+        if (state.activeTool !== "ruler") return;
+        if (event.type === "keydown" && event.key === "Escape") { finishRulerMeasurement(); return; }
+        if (event.type === "pointerdown") {
+          if (rulerSession || !event.isPrimary || event.button !== 0) return;
+          if (!cameraViewportPoint(event.clientX, event.clientY).inside) return;
+          const start = rulerGridPointAtClient(event.clientX, event.clientY);
+          rulerSession = { pointerId: event.pointerId, pointerType: event.pointerType, start, end: start };
+          rulerLayer.dataset.active = "true";
+          try { workspaceCard.setPointerCapture?.(event.pointerId); } catch {}
+          renderRulerMeasurement();
+          return;
+        }
+        if (!ownsRulerPointer(event)) return;
+        if (event.type === "pointerup" || event.type === "pointercancel" ||
+          (event.pointerType === "mouse" && !(event.buttons & 1))) {
+          finishRulerMeasurement();
+          return;
+        }
+        rulerSession.end = rulerGridPointAtClient(event.clientX, event.clientY);
+        scheduleRulerMeasurement();
+      }
+
+      workspaceCard.addEventListener("lostpointercapture", event => {
+        if (rulerSession?.pointerId === event.pointerId) finishRulerMeasurement();
+      });
+
       // A barreira roda antes dos handlers de tokens, câmera e multitoque.
-      // Quando houver gestos próprios da ferramenta, seu dispatcher entra aqui.
+      // O dispatcher da régua recebe o gesto sem liberar os handlers do mapa.
       ["pointerdown", "pointermove", "pointerup", "pointercancel", "click", "dblclick",
         "contextmenu", "wheel", "keydown"].forEach(type => {
         document.addEventListener(type, interceptWorkspaceInput, { capture: true, passive: false });
@@ -1647,7 +1814,10 @@
         valueId: "grid-value",
         stateKey: "distance",
         format: value => ({ input: numberFormat.format(value), aria: numberFormat.format(value) }),
-        apply: value => { grid.dataset.distance = String(value); }
+        apply: value => {
+          grid.dataset.distance = String(value);
+          if (rulerSession) scheduleRulerMeasurement();
+        }
       });
 
       const opacityControl = createNumericControl({
@@ -3798,6 +3968,7 @@
 
       // Uma única saída para interromper gestos sem confirmar seus destinos.
       function cancelWorkspaceGestures(reason = "cancelado") {
+        finishRulerMeasurement();
         const pointerIds = new Set([
           ...canvasTapCandidates.keys(), ...tokenTapCandidates.keys(),
           ...touchDeselectPointers.keys()

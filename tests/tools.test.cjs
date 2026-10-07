@@ -12,8 +12,8 @@ function setup(){
     TOOL_DEFINITIONS:{ruler:{type:'priority'},heart:{type:'visual'},other:{type:'priority'}},toolButtons:buttons,
     toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
     document:{documentElement:{dataset:{}}},workspaceCard:{contains:t=>t?.onMap===true},
-    Element:class{},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
-  for(const name of ['hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
+    Element:class{},rulerSession:null,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
+  for(const name of ['hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
   assert.equal(vm.runInContext('typeof toggleTool',ctx),'function','tool selection is missing');
   return ctx;
 }
