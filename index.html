@@ -985,11 +985,6 @@
         </article>
       </section>
 
-      <!-- LAYER 8: seleção livre de tokens; não altera background/grid. -->
-      <svg id="token-lasso" class="token-lasso" data-active="false" aria-hidden="true">
-        <path id="token-lasso-path" class="token-lasso__path" d=""></path>
-      </svg>
-
       <div id="formation-magic" class="formation-magic" data-active="false" aria-hidden="true">
         <canvas id="formation-magic-canvas" class="formation-magic__canvas"></canvas>
         <span id="formation-magic-guide" class="formation-magic__guide"></span>
@@ -997,6 +992,11 @@
       </div>
 
         </div>
+
+        <!-- LAYER DE INTERAÇÃO: fica fora da câmera para seguir o dedo em coordenadas de tela. -->
+        <svg id="token-lasso" class="token-lasso" data-active="false" aria-hidden="true">
+          <path id="token-lasso-path" class="token-lasso__path" d=""></path>
+        </svg>
       </section>
 
       <section id="token-action-menu" class="ui-panel token-action-menu" role="menu" aria-label="Ações dos tokens selecionados" hidden>
@@ -2681,7 +2681,7 @@
         } else {
           magicFrame = 0;
           magicLastFrame = 0;
-          magicContext.clearRect(0, 0, rect.width, rect.height);
+          magicContext.clearRect(0, 0, workspaceLayers.clientWidth, workspaceLayers.clientHeight);
         }
       }
 
@@ -2972,10 +2972,13 @@
       }
 
       function localPoint(event) {
-        const point = clientToWorkspaceLayer(event.clientX, event.clientY);
+        // O laço é uma interação de tela, não um objeto do mapa. Mantê-lo em
+        // coordenadas do viewport evita que zoom/pan alterem a tolerância do
+        // duplo toque ou desalinhem o traço em relação ao dedo.
+        const rect = cameraViewport.getBoundingClientRect();
         return {
-          x: clamp(point.x, 0, workspaceLayers.clientWidth),
-          y: clamp(point.y, 0, workspaceLayers.clientHeight)
+          x: clamp(event.clientX - rect.left, 0, cameraViewport.clientWidth),
+          y: clamp(event.clientY - rect.top, 0, cameraViewport.clientHeight)
         };
       }
 
@@ -3019,29 +3022,40 @@
       }
 
       function selectTokensInsideLasso(points) {
+        const viewportRect = cameraViewport.getBoundingClientRect();
         const selected = tokens.filter(token => {
           const rect = token.getBoundingClientRect();
-          const center = clientToWorkspaceLayer(
-            rect.left + rect.width / 2,
-            rect.top + rect.height / 2
-          );
+          const center = {
+            x: rect.left + rect.width / 2 - viewportRect.left,
+            y: rect.top + rect.height / 2 - viewportRect.top
+          };
           return pointInsidePolygon(center, points);
         });
         selectTokenSet(selected);
+        return selected;
       }
 
       function finishLasso(pointerEvent, cancelled = false) {
         const session = lassoSession;
         if (!session || pointerEvent.pointerId !== session.pointerId) return;
         lassoSession = null;
-        workspaceCard.releasePointerCapture?.(session.pointerId);
+        try {
+          if (workspaceCard.hasPointerCapture?.(session.pointerId)) {
+            workspaceCard.releasePointerCapture(session.pointerId);
+          }
+        } catch {}
         workspaceCard.removeEventListener("pointermove", moveLasso);
         workspaceCard.removeEventListener("pointerup", finishLasso);
         workspaceCard.removeEventListener("pointercancel", cancelLasso);
 
         if (!cancelled && session.points.length >= 3) {
           renderLasso(session.points, true); // fecha com uma reta até o ponto inicial
-          selectTokensInsideLasso(session.points);
+          const selected = selectTokensInsideLasso(session.points);
+          debugLog("lasso", "laço concluído", {
+            pointerType: session.pointerType,
+            points: session.points.length,
+            selected: selected.map(token => token.dataset.tokenId || token.id)
+          });
           window.setTimeout(() => {
             if (!lassoSession) {
               lasso.dataset.active = "false";
@@ -3049,6 +3063,10 @@
             }
           }, 130);
         } else {
+          debugLog("lasso", cancelled ? "laço cancelado" : "laço encerrado sem área suficiente", {
+            pointerType: session.pointerType,
+            points: session.points.length
+          });
           lasso.dataset.active = "false";
           lassoPath.setAttribute("d", "");
         }
@@ -3080,10 +3098,15 @@
         };
         lasso.dataset.active = "true";
         renderLasso(lassoSession.points);
-        workspaceCard.setPointerCapture?.(event.pointerId);
+        try { workspaceCard.setPointerCapture?.(event.pointerId); } catch {}
         workspaceCard.addEventListener("pointermove", moveLasso);
         workspaceCard.addEventListener("pointerup", finishLasso);
         workspaceCard.addEventListener("pointercancel", cancelLasso);
+        debugLog("lasso", "laço iniciado", {
+          pointerType: event.pointerType,
+          x: Math.round(startPoint.x),
+          y: Math.round(startPoint.y)
+        });
       }
 
       function cancelActiveLasso() {
@@ -3691,6 +3714,11 @@
           pointDistanceSquared(point, lastCanvasPress.point) <= tolerance * tolerance;
 
         if (isSecondPress) {
+          debugLog("lasso", "duplo toque/clique reconhecido", {
+            pointerType: event.pointerType,
+            intervalMs: Math.round(now - lastCanvasPress.time),
+            distancePx: Math.round(Math.sqrt(pointDistanceSquared(point, lastCanvasPress.point)))
+          });
           if (lastCanvasPress.gridPointId) removeGridPointById(lastCanvasPress.gridPointId);
           lastCanvasPress = null;
           const existing = canvasTapCandidates.get(event.pointerId);
