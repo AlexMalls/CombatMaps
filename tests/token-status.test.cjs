@@ -10,13 +10,16 @@ function setup(){
   const a=makeToken('soldados-01'),b=makeToken('soldados-02');
   const c=vm.createContext({tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
     TOKEN_TAP_MOVE_TOLERANCE:12,TOKEN_STATUS_HOLD_MS:400,state:{isMoving:false,touchMode:false},
-    touchDeselectPointers:new Map(),hasPriorityTool:()=>false,selected:[],
+    touchDeselectPointers:new Map(),hasPriorityTool:()=>false,selected:[],tokens:[a,b],
+    setTokenSelected:(token,value)=>{token.dataset.selected=String(value)},
+    reconcileSelectionArtifacts:(before,after)=>{c.selected=after;c.reconciled={before,after}},
+    updateTokenSelectionNumbers(){},updateGridPointMarkers(){},closeTokenActionMenu(){},
     getSelectedTokensInNumberOrder:()=>c.selected,openTokenStatus(token){opened.add(c.tokenIds.get(token))},
     closeAllTokenStatus(){opened.clear()},toggleTokenSelection(token){token.dataset.selected=token.dataset.selected==='true'?'false':'true'},
     window:{setTimeout(fn){const id=++timerId;timers.set(id,fn);return id},clearTimeout:id=>timers.delete(id)},
     performance:{now:()=>1000},statusLongClickToken:null,statusLongClickUntil:0,
     a,b,opened,timers});
-  for(const name of ['registerTokenData','getTokenInfo','openStatusForToken','releaseTokenPressPointer',
+  for(const name of ['registerTokenData','getTokenInfo','clearTokenSelection','openStatusForToken','releaseTokenPressPointer',
     'cancelTokenPress','cancelAllTokenPresses','beginTokenPress','moveTokenPress','endTokenPress'])vm.runInContext(source(name),c);
   assert.equal(vm.runInContext('typeof beginTokenPress',c),'function','token press classification is missing');
   vm.runInContext('registerTokenData(a);registerTokenData(b)',c);
@@ -42,7 +45,11 @@ test('holding opens status without selection and release preserves the panel',()
 test('individual holds accumulate panels and a multi-selection hold opens the selected group',()=>{
   const c=setup();c.e=c.event();vm.runInContext('beginTokenPress(e,a)',c);c.hold();vm.runInContext('endTokenPress(e);beginTokenPress(e,b)',c);c.hold();
   assert.deepEqual([...c.opened],['soldados-01','soldados-02']);vm.runInContext('endTokenPress(e)',c);
-  c.opened.clear();c.selected=[c.a,c.b];vm.runInContext('beginTokenPress(e,b)',c);c.hold();assert.equal(c.opened.size,2);
+  c.opened.clear();c.selected=[c.a,c.b];c.a.dataset.selected=c.b.dataset.selected='true';c.state.selectionOrder=[c.a,c.b];
+  vm.runInContext('beginTokenPress(e,b)',c);c.hold();assert.equal(c.opened.size,2);
+  assert.equal(c.a.dataset.selected,'false');assert.equal(c.b.dataset.selected,'false');
+  assert.equal(c.state.selectionOrder.length,0);assert.equal(c.reconciled.after.length,0);
+  vm.runInContext('endTokenPress(e)',c);assert.equal(c.b.dataset.selected,'false');assert.equal(c.opened.size,2);
 });
 test('movement, cancelled gestures and priority activation prevent stale hold timers',()=>{
   const c=setup();c.e=c.event();vm.runInContext('beginTokenPress(e,a)',c);c.e=c.event(1,{clientX:140});vm.runInContext('moveTokenPress(e)',c);c.hold();vm.runInContext('endTokenPress(e)',c);
@@ -52,7 +59,7 @@ test('movement, cancelled gestures and priority activation prevent stale hold ti
 });
 test('touch short taps and long presses use the same classification',()=>{
   const c=setup();c.state.touchMode=true;c.e=c.event(1,{pointerType:'touch'});vm.runInContext('beginTokenPress(e,a);endTokenPress(e)',c);assert.equal(c.a.dataset.selected,'true');
-  vm.runInContext('beginTokenPress(e,a)',c);c.hold();vm.runInContext('endTokenPress(e)',c);assert.equal(c.a.dataset.selected,'true');assert.equal(c.opened.size,1);
+  vm.runInContext('beginTokenPress(e,a)',c);c.hold();vm.runInContext('endTokenPress(e)',c);assert.equal(c.a.dataset.selected,'false');assert.equal(c.opened.size,1);
 });
 test('status placement stays within the card and avoids an occupied panel when space exists',()=>{
   const c=setup();vm.runInContext(source('clamp')+source('getTokenStatusPosition'),c);

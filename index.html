@@ -1448,6 +1448,8 @@
         const selected = getSelectedTokensInNumberOrder();
         const targets = selected.length > 1 ? selected : [token];
         targets.forEach(openTokenStatus);
+        // Os cards substituem a seleção de movimento após preservar o grupo consultado.
+        clearTokenSelection();
       }
 
       function openTokenStatus(token) {
