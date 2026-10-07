@@ -87,3 +87,34 @@ test('context menus during a hold cannot bubble into map selection actions',()=>
   vm.runInContext('(event => {'+body+'})(contextEvent)',c);
   assert.equal(prevented,true);assert.equal(stopped,true);
 });
+
+test('connector joins token and card edges in all directions and hides when overlapping',()=>{
+  const c=setup();vm.runInContext(source('clamp')+source('getTokenStatusLink'),c);
+  c.anchor={left:100,right:140,top:100,bottom:140};
+  for(const [panel,expected] of [
+    [{x:160,y:80,width:100,height:80},[140,120,160,120]],
+    [{x:0,y:80,width:80,height:80},[100,120,80,120]],
+    [{x:80,y:0,width:80,height:80},[120,100,120,80]],
+    [{x:80,y:160,width:80,height:80},[120,140,120,160]]]){
+    c.panel=panel;const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
+    assert.deepEqual([r.x1,r.y1,r.x2,r.y2],expected);
+  }
+  c.panel={x:80,y:80,width:80,height:80};const r=vm.runInContext('getTokenStatusLink(anchor,panel)',c);
+  assert.equal(r.x1,r.x2);assert.equal(r.y1,r.y2);
+});
+test('mouse and touch drag cards independently with bounded positions and clean capture release',()=>{
+  for(const pointerType of ['mouse','touch']){
+    const c=setup();c.tokenStatusDrag=null;c.workspaceCard={clientWidth:340,clientHeight:600};
+    c.scheduleTokenStatusPositions=()=>{};
+    c.panel={element:c.a,position:{x:150,y:200,width:168,height:90}};
+    c.a.classList={add(){},remove(){}};
+    for(const name of ['clamp','beginTokenStatusDrag','moveTokenStatusDrag','finishTokenStatusDrag'])vm.runInContext(source(name),c);
+    c.e=c.event(1,{pointerType,stopPropagation(){},preventDefault(){}});
+    vm.runInContext('beginTokenStatusDrag(e,panel)',c);assert.ok(c.a.captures.has(1));
+    c.e=c.event(1,{pointerType,clientX:800,clientY:-200,stopPropagation(){},preventDefault(){}});
+    vm.runInContext('moveTokenStatusDrag(e)',c);
+    assert.equal(c.panel.manualPosition.x,164);assert.equal(c.panel.manualPosition.y,8);
+    assert.equal(c.a.dataset.selected,'false');
+    vm.runInContext('finishTokenStatusDrag(e)',c);assert.equal(c.tokenStatusDrag,null);assert.equal(c.a.captures.size,0);
+  }
+});
