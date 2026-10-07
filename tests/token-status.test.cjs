@@ -161,7 +161,7 @@ test('health changes affect only the matching token, clamp at zero and reverse i
   const c=setup();c.tokenStatusPanels=new Map();c.scheduleTokenStatusPositions=()=>{};
   const css=new Map();c.a.style={setProperty:(key,value)=>css.set(key,value)};c.b.style={setProperty(){}};
   c.tokenLifeFormat=new Intl.NumberFormat('pt-BR');
-  const panel={life:{},subtract:{}};c.tokenStatusPanels.set('soldados-01',panel);
+  const panel={life:{},subtract:{},add:{}};c.tokenStatusPanels.set('soldados-01',panel);
   for(const name of ['getTokenDamagePercent','updateTokenHealthVisuals','changeTokenLife'])vm.runInContext(source(name),c);
   for(let i=0;i<5;i++)vm.runInContext('changeTokenLife(a,-1000)',c);
   assert.equal(vm.runInContext('getTokenInfo(a).life',c),5000);assert.equal(css.get('--token-life-remaining'),'50%');
@@ -170,7 +170,10 @@ test('health changes affect only the matching token, clamp at zero and reverse i
   assert.equal(vm.runInContext('getTokenInfo(a).life',c),0);assert.equal(css.get('--token-life-remaining'),'0%');assert.equal(panel.subtract.disabled,true);
   vm.runInContext('changeTokenLife(a,1000)',c);assert.equal(css.get('--token-life-remaining'),'10%');assert.equal(panel.subtract.disabled,false);
   for(let i=0;i<12;i++)vm.runInContext('changeTokenLife(a,1000)',c);
-  assert.equal(vm.runInContext('getTokenInfo(a).life',c),13000);assert.equal(css.get('--token-life-remaining'),'100%');
+  assert.equal(vm.runInContext('getTokenInfo(a).life',c),10000);assert.equal(css.get('--token-life-remaining'),'100%');assert.equal(panel.add.disabled,true);
+  vm.runInContext('changeTokenLife(a,-1000)',c);assert.equal(panel.add.disabled,false);
+  vm.runInContext('getTokenInfo(a).maxLife=9500;changeTokenLife(a,1000)',c);
+  assert.equal(vm.runInContext('getTokenInfo(a).life',c),9500);
 });
 test('health buttons do not begin a status-card drag',()=>{
   const c=setup();c.tokenStatusDrag=null;c.panel={position:{x:0,y:0},element:{}};

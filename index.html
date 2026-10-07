@@ -1470,6 +1470,7 @@
         if (panel) {
           panel.life.textContent = tokenLifeFormat.format(info.life);
           panel.subtract.disabled = info.life <= 0;
+          panel.add.disabled = info.life >= info.maxLife;
         }
       }
 
@@ -1489,7 +1490,7 @@
       function changeTokenLife(token, amount) {
         const info = getTokenInfo(token);
         if (!info) return;
-        info.life = Math.max(0, info.life + amount);
+        info.life = Math.min(info.maxLife, Math.max(0, info.life + amount));
         updateTokenHealthVisuals(token);
         scheduleTokenStatusPositions();
       }
