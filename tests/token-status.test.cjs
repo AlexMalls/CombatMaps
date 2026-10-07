@@ -11,6 +11,7 @@ function setup(){
   const c=vm.createContext({tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
     TOKEN_TAP_MOVE_TOLERANCE:12,TOKEN_STATUS_HOLD_MS:400,state:{isMoving:false,touchMode:false},
     touchDeselectPointers:new Map(),hasPriorityTool:()=>false,selected:[],tokens:[a,b],
+    movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,updateMovementHistoryUI(){},cancelTokenDeath(){},beginTokenDeath(){},
     setTokenSelected:(token,value)=>{token.dataset.selected=String(value)},
     reconcileSelectionArtifacts:(before,after)=>{c.selected=after;c.reconciled={before,after}},
     updateTokenSelectionNumbers(){},updateGridPointMarkers(){},closeTokenActionMenu(){},
@@ -162,7 +163,7 @@ test('health changes affect only the matching token, clamp at zero and reverse i
   const css=new Map();c.a.style={setProperty:(key,value)=>css.set(key,value)};c.b.style={setProperty(){}};
   c.tokenLifeFormat=new Intl.NumberFormat('pt-BR');
   const panel={life:{},subtract:{},add:{}};c.tokenStatusPanels.set('soldados-01',panel);
-  for(const name of ['getTokenDamagePercent','updateTokenHealthVisuals','changeTokenLife'])vm.runInContext(source(name),c);
+  for(const name of ['getTokenDamagePercent','updateTokenHealthVisuals','applyTokenLifeState','changeTokenLife'])vm.runInContext(source(name),c);
   for(let i=0;i<5;i++)vm.runInContext('changeTokenLife(a,-1000)',c);
   assert.equal(vm.runInContext('getTokenInfo(a).life',c),5000);assert.equal(css.get('--token-life-remaining'),'50%');
   assert.equal(panel.life.textContent,'5.000');assert.equal(vm.runInContext('getTokenInfo(b).life',c),10000);
