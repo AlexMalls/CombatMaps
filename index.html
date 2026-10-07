@@ -2057,12 +2057,20 @@
         }) || null;
       }
 
+      function getTouchActionHitTarget(clientX, clientY) {
+        // Pointer Capture faz o pointerup chegar pelo workspaceCard no celular,
+        // mesmo quando o dedo terminou sobre o camera-stage. elementFromPoint
+        // consulta o elemento realmente existente sob o dedo naquele instante.
+        return document.elementFromPoint(clientX, clientY);
+      }
+
       function shouldOpenTouchActionMenu(event) {
         // O Modo Toque define a regra de interação, independentemente de o teste
         // estar sendo feito com dedo real ou com mouse em um desktop.
         if (!state.touchMode) return false;
         if (!canExecuteMoveSelection()) return false;
-        if (!isCanvasGestureTarget(event.target)) return false;
+        const hitTarget = getTouchActionHitTarget(event.clientX, event.clientY);
+        if (!isCanvasGestureTarget(hitTarget)) return false;
         if (getGridPointMarkerAtClient(event.clientX, event.clientY)) return false;
         return true;
       }
@@ -3756,9 +3764,11 @@
           return;
         }
         if (state.touchMode && canExecuteMoveSelection()) {
+          const hitTarget = getTouchActionHitTarget(event.clientX, event.clientY);
           debugLog("touch", "menu não aberto porque o ponto tocado não é uma área vazia válida", {
             pointerType: event.pointerType,
-            target: debugTargetLabel(event.target),
+            releaseTarget: debugTargetLabel(event.target),
+            hitTarget: debugTargetLabel(hitTarget),
             overDestination: Boolean(getGridPointMarkerAtClient(event.clientX, event.clientY))
           });
         }
