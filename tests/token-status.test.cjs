@@ -118,3 +118,24 @@ test('mouse and touch drag cards independently with bounded positions and clean 
     vm.runInContext('finishTokenStatusDrag(e)',c);assert.equal(c.tokenStatusDrag,null);assert.equal(c.a.captures.size,0);
   }
 });
+
+test('status visuals are independent of movement selection, reused on reopen and removed on close',()=>{
+  const c=setup();
+  const makeNode=()=>({children:[],attrs:{},classList:{add(){}},style:{},
+    append(...items){this.children.push(...items)},setAttribute(key,value){this.attrs[key]=value},
+    addEventListener(){},remove(){this.removed=true}});
+  c.document={createElement:makeNode,createElementNS:makeNode};
+  c.tokenStatusLayer=makeNode();c.tokenStatusLinks=makeNode();c.tokenStatusSpectra=makeNode();
+  c.tokenStatusPanels=new Map();c.tokenLifeFormat=new Intl.NumberFormat('pt-BR');
+  c.positionTokenStatusPanels=()=>{};c.finishTokenStatusDrag=()=>{};c.tokenStatusFrame=0;
+  vm.runInContext(source('openTokenStatus')+source('closeAllTokenStatus'),c);
+  vm.runInContext('openTokenStatus(a);openTokenStatus(a)',c);
+  assert.equal(c.tokenStatusPanels.size,1);assert.equal(c.tokenStatusLinks.children.length,2);
+  assert.equal(c.a.dataset.selected,'false');assert.equal(c.tokenStatusSpectra.children.length,1);
+  const panel=c.tokenStatusPanels.get('soldados-01');assert.equal(panel.life.textContent,'10.000');
+  assert.equal(panel.link.attrs.stroke,`url(#${panel.spectrum.id})`);
+  vm.runInContext('closeAllTokenStatus()',c);
+  assert.equal(c.tokenStatusPanels.size,0);
+  for(const node of [panel.element,panel.link,panel.outline,panel.spectrum])assert.equal(node.removed,true);
+  assert.equal(c.a.dataset.selected,'false');
+});
