@@ -71,7 +71,7 @@ function gestureContext() {
     canvasTapCandidates:new Map(),tokenTapCandidates:new Map(),lastCanvasPress:{},
     formationSession:null,lassoSession:null,touchBlockRenderFrame:0,pendingTouchBlockCentroid:null,
     cancelAnimationFrame(){},threeFingerPointers:new Map(),threeFingerGestureLatched:false,
-    stopMagicTrail(){},finishRulerMeasurement(){},finishTokenStatusDrag(){}, cancelAllTokenPresses(){ctx.tokenTapCandidates.clear()},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
+    stopMagicTrail(){},finishRulerMeasurement(){},finishHighlightStroke(){},highlightTouches:new Set(),highlightBlocked:false,finishTokenStatusDrag(){}, cancelAllTokenPresses(){ctx.tokenTapCandidates.clear()},removeFormationPreviewMarkers(){},updateGridPointMarkers(){},
     movementGuidesLayer:{dataset:{}},lasso:{dataset:{}},lassoPath:{setAttribute(){}},
     closeTokenActionMenu(){},finishDesktopCameraPan(){ctx.desktopCameraPan=null},
     moveLasso(){},finishLasso(){},cancelLasso(){}
@@ -135,7 +135,7 @@ test('grid control reflects the fitted size and writes the bounded positions to 
   const ctx=vm.createContext({tokens,state:{size:48,isMoving:false},appliedWorkspaceGeometry:'',
     workspaceLayers:{clientWidth:340,clientHeight:740},grid:{style:{setProperty(){}}},
     document:{getElementById:id=>elements.get(id)},cancelWorkspaceGestures(){},scheduleTokenStatusPositions(){},
-    clearAllGridPoints(){},clearMovementHistory(){},updateTokenSelectionNumbers(){},updateGridPointMarkers(){}});
+    clearAllGridPoints(){},clearMovementHistory(){},clearGridHighlights(){},updateTokenSelectionNumbers(){},updateGridPointMarkers(){}});
   for(const name of ['parseNumber','createNumericControl','gridFootprintsOverlap','planWorkspaceLayout',
     'getGridOrigin','getTokenGridState','constrainWorkspaceCell','applyWorkspaceLayout','updateTokenGeometry','updateAllTokens'])
     vm.runInContext(source(name),ctx);
@@ -165,7 +165,7 @@ test('changing grid geometry invalidates undo and redo even when current positio
   const ctx=vm.createContext({tokens,state:{size:80,isMoving:false},appliedWorkspaceGeometry:'1280x800@48',
     workspaceLayers:{clientWidth:1280,clientHeight:800},grid:{style:{setProperty(){}}},
     movementHistory:history,movementRedoHistory:redo,
-    cancelWorkspaceGestures(){},clearAllGridPoints(){},updateAllTokens(){},updateMovementHistoryUI(){},debugLog(){}});
+    cancelWorkspaceGestures(){},clearGridHighlights(){},clearAllGridPoints(){},updateAllTokens(){},updateMovementHistoryUI(){},debugLog(){}});
   for(const name of ['gridFootprintsOverlap','planWorkspaceLayout','getTokenGridState','applyWorkspaceLayout','clearMovementHistory'])
     vm.runInContext(source(name),ctx);
   vm.runInContext('applyWorkspaceLayout(80)',ctx);

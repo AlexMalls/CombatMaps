@@ -9,7 +9,7 @@ function setup(){
   const element=()=>({dataset:{},attrs:{},style:{},setAttribute(k,v){this.attrs[k]=String(v)}});
   const label=element();label.offsetWidth=40;label.offsetHeight=20;
   const ctx=vm.createContext({state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'ruler'},
-    workspaceLayers:{clientWidth:960,clientHeight:720},rulerSession:null,rulerFrame:0,
+    workspaceLayers:{clientWidth:960,clientHeight:720},rulerSession:null,rulerFrame:0,highlightSession:null,highlightTouches:new Set(),highlightBlocked:false,finishHighlightStroke(){},
     rulerLayer:element(),rulerLine:element(),rulerGradient:element(),rulerLabel:label,
     rulerNumberFormat:new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}),
     cameraViewport:{clientWidth:960,clientHeight:720,getBoundingClientRect:()=>({left:10,top:20,right:970,bottom:740})},

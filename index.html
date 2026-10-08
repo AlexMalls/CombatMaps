@@ -541,6 +541,11 @@
 
     /* LAYER DE INTERAÇÃO — laço livre para seleção múltipla de tokens. */
     /* Medição: camada de tela independente da câmera e dos objetos do mapa. */
+    .grid-highlight-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 6; overflow: hidden; pointer-events: none; }
+    .grid-highlight-cell { fill: var(--color-highlight-soft); stroke: url(#grid-highlight-spectrum); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+    .grid-highlight-guide { stroke: var(--color-accent); stroke-width: 1px; stroke-dasharray: 5 4; opacity: 0.4; vector-effect: non-scaling-stroke; visibility: hidden; }
+    .grid-highlight-guide[data-active="true"] { visibility: visible; }
+    @media (forced-colors: active) { .grid-highlight-cell, .grid-highlight-guide { stroke: Highlight; } }
     .ruler-layer {
       position: absolute;
       inset: 0;
@@ -1071,7 +1076,7 @@
       width: 3.25rem;
       padding: var(--space-2) 0;
       border-radius: 2rem;
-      /* Dois ícones fixos: sem rolagem e sem cortar o contorno selecionado. */
+      /* Barra compacta: sem rolagem e sem cortar o contorno selecionado. */
       overflow: visible;
     }
     .corner-settings[data-open="true"] .corner-settings__panel {
@@ -1171,6 +1176,13 @@
 
       <!-- LAYER 2+: objetos/mapas/tokens futuros entram aqui, nunca no background. -->
       <section id="workspace-layers" class="workspace-layers" aria-label="Camadas de edição">
+        <svg id="grid-highlight-layer" class="grid-highlight-layer" aria-hidden="true" focusable="false">
+          <defs><linearGradient id="grid-highlight-spectrum" class="magic-spectrum" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"/><stop offset="33%"/><stop offset="67%"/><stop offset="100%"/>
+          </linearGradient></defs>
+          <g id="grid-highlight-cells"></g>
+          <line id="grid-highlight-guide" class="grid-highlight-guide" data-active="false"/>
+        </svg>
         <article id="token-soldados-01" class="token" data-type="token" data-token-id="soldados-01"
           data-grid-col="0" data-grid-row="0" data-grid-size="1" data-selected="false"
           tabindex="0" role="button" aria-label="Token Soldados 01. Clique para selecionar e redimensionar.">
@@ -1231,6 +1243,11 @@
       <button class="ui-tool" type="button" data-tool="ruler" aria-label="Régua — ferramenta de prioridade" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m3 16 13-13 5 5L8 21Zm10-10 2 2m-5 1 2 2m-5 1 2 2m-5 1 2 2"/>
+        </svg>
+      </button>
+      <button class="ui-tool" type="button" data-tool="highlight" aria-label="Destacar quadrados — ferramenta de prioridade" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m10 14 7-10 4 4-10 7-3 3-3-3Z M3 21h8 M9 12l4 4"/>
         </svg>
       </button>
       <button class="ui-tool" type="button" data-tool="heart" aria-label="Mostrar dano nos tokens" aria-pressed="true">
@@ -1427,10 +1444,17 @@
       const rulerNumberFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
       let rulerSession = null;
       let rulerFrame = 0;
+      const highlightCellsLayer = document.getElementById("grid-highlight-cells");
+      const highlightGuide = document.getElementById("grid-highlight-guide");
+      const highlightCells = new Map();
+      const highlightTouches = new Set();
+      let highlightSession = null;
+      let highlightBlocked = false;
       // Registro único: prioridade é exclusiva; visual é um toggle independente.
       // Futuras ferramentas devem declarar sua classificação aqui.
       const TOOL_DEFINITIONS = Object.freeze({
         ruler: { type: "priority" },
+        highlight: { type: "priority" },
         heart: { type: "visual" }
       });
       const touchModeCheckbox = document.getElementById("touch-mode");
@@ -1956,6 +1980,7 @@
           else state.visualTools.add(id);
         } else {
           if (state.isMoving) return false;
+          if (state.activeTool === "highlight") clearGridHighlights();
           cancelWorkspaceGestures("ferramenta exclusiva alterada");
           state.activeTool = state.activeTool === id ? null : id;
         }
@@ -1975,7 +2000,7 @@
       }
 
       function interceptWorkspaceInput(event) {
-        if (!ownsRulerPointer(event) && !blocksWorkspaceInput(event)) return;
+        if (!ownsRulerPointer(event) && !ownsHighlightPointer(event) && !blocksWorkspaceInput(event)) return;
         if (event.type === "pointerdown") {
           if (state.open) setOpen(false);
           if (state.appSettingsOpen) setAppSettingsOpen(false);
@@ -1983,6 +2008,114 @@
         if (event.cancelable) event.preventDefault();
         event.stopImmediatePropagation();
         dispatchRulerInput(event);
+        dispatchHighlightInput(event);
+      }
+
+      function getHighlightCells(start, end, cell, origin) {
+        const x = (start.x - origin.x) / cell, y = (start.y - origin.y) / cell;
+        const ex = (end.x - origin.x) / cell, ey = (end.y - origin.y) / cell;
+        let col = Math.floor(x), row = Math.floor(y);
+        const endCol = Math.floor(ex), endRow = Math.floor(ey), dx = ex - x, dy = ey - y;
+        const sx = Math.sign(dx), sy = Math.sign(dy);
+        const txStep = sx ? 1 / Math.abs(dx) : Infinity, tyStep = sy ? 1 / Math.abs(dy) : Infinity;
+        let tx = sx ? ((sx > 0 ? col + 1 : col) - x) / dx : Infinity;
+        let ty = sy ? ((sy > 0 ? row + 1 : row) - y) / dy : Infinity;
+        const cells = [{ col, row }], limit = Math.abs(endCol - col) + Math.abs(endRow - row) + 1;
+        for (let step = 0; step < limit && (col !== endCol || row !== endRow); step += 1) {
+          // No canto final, usar a célula do endpoint sem avançar além do segmento.
+          if (Math.min(tx, ty) >= 1 - 1e-10) { cells.push({ col: endCol, row: endRow }); break; }
+          if (Math.abs(tx - ty) < 1e-10) { col += sx; row += sy; tx += txStep; ty += tyStep; }
+          else if (tx < ty) { col += sx; tx += txStep; }
+          else { row += sy; ty += tyStep; }
+          cells.push({ col, row });
+        }
+        return cells;
+      }
+
+      function highlightPointAtClient(clientX, clientY) {
+        const point = clientToWorkspaceLayer(clientX, clientY);
+        if (!point.insideViewport || point.x < 0 || point.y < 0 || point.x >= workspaceLayers.clientWidth || point.y >= workspaceLayers.clientHeight) return null;
+        return { x: point.x, y: point.y };
+      }
+
+      function markHighlightSegment(start, end) {
+        const cell = state.size, origin = getGridOrigin(cell);
+        for (const { col, row } of getHighlightCells(start, end, cell, origin)) {
+          const key = `${col},${row}`;
+          if (highlightCells.has(key)) continue;
+          const x = origin.x + col * cell, y = origin.y + row * cell;
+          if (x + cell <= 0 || y + cell <= 0 || x >= workspaceLayers.clientWidth || y >= workspaceLayers.clientHeight) continue;
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.classList.add("grid-highlight-cell");
+          Object.entries({ x, y, width: cell, height: cell }).forEach(([name, value]) => rect.setAttribute(name, value));
+          highlightCellsLayer.append(rect);
+          highlightCells.set(key, rect);
+        }
+      }
+
+      function renderHighlightGuide() {
+        const session = highlightSession;
+        highlightGuide.dataset.active = String(Boolean(session && Math.hypot(session.end.x - session.start.x, session.end.y - session.start.y) > 3 / state.cameraZoom));
+        if (!session) return;
+        Object.entries({ x1: session.start.x, y1: session.start.y, x2: session.end.x, y2: session.end.y })
+          .forEach(([name, value]) => highlightGuide.setAttribute(name, value));
+      }
+
+      function finishHighlightStroke() {
+        const session = highlightSession;
+        highlightSession = null;
+        highlightGuide.dataset.active = "false";
+        if (session) releaseWorkspacePointer(session.pointerId);
+      }
+
+      function clearGridHighlights() {
+        finishHighlightStroke();
+        highlightCells.clear();
+        highlightCellsLayer.replaceChildren();
+      }
+
+      function ownsHighlightPointer(event) {
+        return ["pointermove", "pointerup", "pointercancel"].includes(event.type) &&
+          (highlightSession?.pointerId === event.pointerId || highlightTouches.has(event.pointerId));
+      }
+
+      function dispatchHighlightInput(event) {
+        if (state.activeTool !== "highlight") return;
+        if (event.type === "contextmenu") {
+          if (event.pointerType !== "touch" && !event.sourceCapabilities?.firesTouchEvents) clearGridHighlights();
+          return;
+        }
+        if (event.type === "pointerdown" && event.button === 2) { clearGridHighlights(); return; }
+        if (event.type === "pointerdown") {
+          if (event.pointerType === "touch") {
+            highlightTouches.add(event.pointerId);
+            if (highlightTouches.size >= 2) { highlightBlocked = true; clearGridHighlights(); return; }
+          }
+          if (highlightBlocked || highlightSession || !event.isPrimary || event.button !== 0) return;
+          const point = highlightPointAtClient(event.clientX, event.clientY);
+          if (!point) return;
+          highlightSession = { pointerId: event.pointerId, pointerType: event.pointerType, start: point, end: point };
+          try { workspaceCard.setPointerCapture(event.pointerId); } catch {}
+          markHighlightSegment(point, point);
+          return;
+        }
+        if (event.type === "pointerup" || event.type === "pointercancel") {
+          highlightTouches.delete(event.pointerId);
+          if (!highlightTouches.size) highlightBlocked = false;
+        }
+        const session = highlightSession;
+        if (!session || session.pointerId !== event.pointerId) return;
+        if (event.type === "pointercancel" || (event.type === "pointermove" && event.pointerType === "mouse" && !(event.buttons & 1))) { finishHighlightStroke(); return; }
+        if (!["pointermove", "pointerup"].includes(event.type)) return;
+        const samples = event.type === "pointermove" ? (event.getCoalescedEvents?.() || []) : [];
+        for (const sample of [...samples, event]) {
+          const point = highlightPointAtClient(sample.clientX, sample.clientY);
+          if (!point) { finishHighlightStroke(); return; }
+          markHighlightSegment(session.end, point);
+          session.end = point;
+        }
+        renderHighlightGuide();
+        if (event.type === "pointerup") finishHighlightStroke();
       }
 
       function getRulerDistance(start, end, unit) {
@@ -2080,6 +2213,9 @@
 
       workspaceCard.addEventListener("lostpointercapture", event => {
         if (rulerSession?.pointerId === event.pointerId) finishRulerMeasurement();
+        if (highlightSession?.pointerId === event.pointerId) finishHighlightStroke();
+        highlightTouches.delete(event.pointerId);
+        if (!highlightTouches.size) highlightBlocked = false;
       });
 
       // A barreira roda antes dos handlers de tokens, câmera e multitoque.
@@ -4537,6 +4673,9 @@
       function cancelWorkspaceGestures(reason = "cancelado") {
         finishTokenStatusDrag();
         finishRulerMeasurement();
+        finishHighlightStroke();
+        highlightTouches.clear();
+        highlightBlocked = false;
         const pointerIds = new Set([
           ...canvasTapCandidates.keys(), ...tokenTapCandidates.keys(),
           ...touchDeselectPointers.keys()
@@ -4845,6 +4984,7 @@
           clearAllGridPoints();
           // Desfazer/refazer e destinos antigos podem apontar para células que não cabem mais.
           clearMovementHistory("geometria do mapa alterada");
+          clearGridHighlights();
         }
         if (relocated) {
           plan.positions.forEach((position, index) => {

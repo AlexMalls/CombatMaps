@@ -7,14 +7,14 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const start=script.indexOf(`      function ${name}(`);return start<0?'':script.slice(start,script.indexOf('\n      }',start)+8);}
 function setup(){
-  const buttons=['ruler','heart'].map(id=>({dataset:{tool:id},attrs:{},setAttribute(k,v){this.attrs[k]=v}}));
+  const buttons=['ruler','highlight','heart'].map(id=>({dataset:{tool:id},attrs:{},setAttribute(k,v){this.attrs[k]=v}}));
   const ctx=vm.createContext({state:{toolsOpen:false,activeTool:null,visualTools:new Set(),isMoving:false,masterMode:true,masterMenuOpen:false},
-    TOOL_DEFINITIONS:{ruler:{type:'priority'},heart:{type:'visual'},other:{type:'priority'}},toolButtons:buttons,
+    TOOL_DEFINITIONS:{ruler:{type:'priority'},heart:{type:'visual'},highlight:{type:'priority'},other:{type:'priority'}},toolButtons:buttons,
     masterMenu:{dataset:{},hidden:false,contains:()=>false},masterPanel:{inert:true,contains:()=>false},
     masterTrigger:{attrs:{},setAttribute(k,v){this.attrs[k]=v},focus(){}},masterModeCheckbox:{checked:true},
     toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
     document:{documentElement:{dataset:{}}},workspaceCard:{contains:t=>t?.onMap===true},
-    Element:class{},rulerSession:null,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
+    Element:class{},rulerSession:null,ownsHighlightPointer:()=>false,dispatchHighlightInput(){},clearGridHighlights(){ctx.cleared++},cleared:0,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
   for(const name of ['isMasterMode','syncMasterMenuUI','setMasterMenuOpen','setMasterMode','hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
   assert.equal(vm.runInContext('typeof toggleTool',ctx),'function','tool selection is missing');
   return ctx;
@@ -109,4 +109,11 @@ test('disabling master mode hides its toolbar, closes it, and prevents opening u
   const c=setup();vm.runInContext('setMasterMenuOpen(true);setMasterMode(false);setMasterMenuOpen(true)',c);
   assert.equal(c.masterMenu.hidden,true);assert.equal(c.state.masterMenuOpen,false);assert.equal(c.masterPanel.inert,true);
   vm.runInContext('setMasterMode(true)',c);assert.equal(c.masterMenu.hidden,false);assert.equal(c.masterMenu.dataset.open,'false');
+});
+
+test('highlight is exclusive and clears on disable or switching tools, while heart preserves it',()=>{
+  const c=setup();vm.runInContext('toggleTool("highlight")',c);assert.equal(vm.runInContext('hasPriorityTool()',c),true);
+  vm.runInContext('toggleTool("heart")',c);assert.equal(c.state.activeTool,'highlight');assert.equal(c.cleared,0);
+  vm.runInContext('toggleTool("highlight")',c);assert.equal(c.state.activeTool,null);assert.equal(c.cleared,1);
+  vm.runInContext('toggleTool("highlight");toggleTool("ruler")',c);assert.equal(c.state.activeTool,'ruler');assert.equal(c.cleared,2);
 });
