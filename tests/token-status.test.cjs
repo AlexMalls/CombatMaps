@@ -8,7 +8,7 @@ function setup(){
     setPointerCapture(id){this.captures.add(id)},hasPointerCapture(id){return this.captures.has(id)},releasePointerCapture(id){this.captures.delete(id)},
     getBoundingClientRect:()=>({left:0,right:200,top:0,bottom:200})});
   const a=makeToken('soldados-01'),b=makeToken('soldados-02');
-  const c=vm.createContext({explorerState:{lifeFields:new Map()},tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
+  const c=vm.createContext({TOKEN_TYPES:{},tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
     TOKEN_TAP_MOVE_TOLERANCE:12,TOKEN_STATUS_HOLD_MS:400,state:{isMoving:false,touchMode:false},
     touchDeselectPointers:new Map(),hasPriorityTool:()=>false,selected:[],tokens:[a,b],
     movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,updateMovementHistoryUI(){},cancelTokenDeath(){},beginTokenDeath(){},
@@ -34,6 +34,17 @@ test('identity stays immutable and each token has its own initial life/status re
   c.a.dataset.tokenId='changed';assert.equal(vm.runInContext('getTokenInfo(a).id',c),'soldados-01');
   assert.throws(()=>vm.runInContext('"use strict";getTokenInfo(a).id="changed"',c));
   vm.runInContext('getTokenInfo(a).life=9000',c);assert.equal(vm.runInContext('getTokenInfo(b).life',c),10000);
+});
+test('instances inherit template health/status and retain an immutable type link',()=>{
+ const c=setup();c.TOKEN_TYPES.soldiers={id:'soldiers',maxLife:12000,status:'Pronto'};
+ c.newToken={dataset:{tokenId:'soldados-08',tokenType:'soldiers'}};
+ vm.runInContext('registerTokenData(newToken)',c);
+ assert.equal(vm.runInContext('getTokenInfo(newToken).life',c),12000);
+ assert.equal(vm.runInContext('getTokenInfo(newToken).maxLife',c),12000);
+ assert.equal(vm.runInContext('getTokenInfo(newToken).status',c),'Pronto');
+ assert.equal(vm.runInContext('getTokenInfo(newToken).typeId',c),'soldiers');
+ assert.throws(()=>vm.runInContext('"use strict";getTokenInfo(newToken).typeId="other"',c));
+ c.newToken.dataset.tokenType='other';assert.equal(vm.runInContext('getTokenInfo(newToken).typeId',c),'soldiers');
 });
 test('short mouse click selects only on release',()=>{
   const c=setup();c.e=c.event();vm.runInContext('beginTokenPress(e,a)',c);assert.equal(c.a.dataset.selected,'false');

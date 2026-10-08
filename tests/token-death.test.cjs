@@ -8,7 +8,7 @@ function setup(){
     isConnected:true,style:{values:{},setProperty(k,v){this.values[k]=v}},attrs:{},
     setAttribute(k,v){this.attrs[k]=v},removeAttribute(k){delete this.attrs[k]},contains:()=>false,
     getBoundingClientRect:()=>({left:100,right:148,top:200,bottom:248,width:48,height:48}),classList:{add(){},remove(){}}};
-  const c=vm.createContext({explorerState:{lifeFields:new Map()},token,tokens:[token],tokenIds:new WeakMap(),tokenData:new Map(),tokenDeaths:new Map(),tokenStatusPanels:new Map(),
+  const c=vm.createContext({TOKEN_TYPES:{},token,tokens:[token],tokenIds:new WeakMap(),tokenData:new Map(),tokenDeaths:new Map(),tokenStatusPanels:new Map(),
     tokenLifeFormat:new Intl.NumberFormat('pt-BR'),state:{isMoving:false,touchMode:false},
     movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,hasPriorityTool:()=>false,
     scheduleTokenStatusPositions(){},updateMovementHistoryUI(){},debugLog(){},closeTokenStatus(){},

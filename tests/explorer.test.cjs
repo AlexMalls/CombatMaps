@@ -69,23 +69,27 @@ test('Explorer right-click does not undo map destinations or clear selection',()
  vm.runInContext(script.slice(start,end),c);
  c.handler({target:{closest:()=>({})},preventDefault(){throw Error('native menu blocked')}});
 });
-test('token catalog uses immutable IDs, actual footprint and life; empty categories clear stale fields',async()=>{
- const node=()=>({children:[],dataset:{},append(...children){this.children.push(...children)},replaceChildren(...children){this.children=children},setAttribute(k,v){this[k]=v}});
- const token={},img={src:'token.png'};const content=node();const buttons=['tokens','maps','scenes','status'].map(id=>({...node(),dataset:{assetCategory:id}}));
- token.querySelector=()=>img;
- const c=setup({document:{createElement:node},explorerContent:content,explorerCategories:buttons,explorerState:{category:'tokens',lifeFields:new Map(),fileSizes:new Map()},tokens:[token],getTokenInfo:()=>({id:'immutable-01',life:8000,maxLife:10000}),getTokenGridState:()=>({size:3}),tokenLifeFormat:new Intl.NumberFormat('pt-BR'),getAssetFileSize:async()=>2500000});
- // setup loads real file-size helper; supply a deterministic real response.
- c.fetch=async()=>({ok:true,headers:{get:()=> '2500000'}});
- vm.runInContext(source('renderAssetExplorerContent'),c);c.renderAssetExplorerContent();
- const item=content.children[1].children[0];assert.equal(item.children[0].src,'token.png');assert.equal(item.children[1].textContent,'immutable-01');
- const rows=item.children[2].children;assert.equal(rows[0].children[1].textContent,'3 × 3');assert.equal(rows[1].children[1].textContent,'8.000 / 10.000');
+test('catalog lists loaded types once even with many map tokens, using template health',async()=>{
+ const node=()=>({children:[],dataset:{},addEventListener(){},append(...children){this.children.push(...children)},replaceChildren(...children){this.children=children},setAttribute(k,v){this[k]=v}});
+ const content=node(),buttons=['tokens','maps','scenes','status'].map(id=>({...node(),dataset:{assetCategory:id}}));
+ const types={soldiers:{id:'soldiers',name:'Soldados',image:'token.png',gridSize:1,maxLife:10000},giant:{id:'giant',name:'Gigante',image:'giant.gif',gridSize:3,maxLife:20000}};
+ const c=setup({document:{createElement:node},explorerContent:content,explorerCategories:buttons,explorerState:{category:'tokens',fileSizes:new Map()},TOKEN_TYPES:types,tokens:Array(7).fill({life:0}),tokenLifeFormat:new Intl.NumberFormat('pt-BR'),fetch:async()=>({ok:true,headers:{get:()=> '2500000'}})});
+ vm.runInContext(source('chooseTokenImage')+source('renderAssetExplorerContent'),c);c.renderAssetExplorerContent();
+ const list=content.children[1];assert.equal(list.children.length,2);
+ const item=list.children[0];assert.equal(item.children[0].src,'token.png');assert.equal(item.children[1].textContent,'Soldados');
+ const rows=item.children[2].children;assert.equal(rows[0].children[1].textContent,'1 × 1');assert.equal(rows[1].children[1].textContent,'10.000');
+ assert.equal(list.children[1].children[2].children[0].children[1].textContent,'3 × 3');
  await new Promise(resolve=>setImmediate(resolve));assert.equal(rows[2].children[1].textContent,'2,5 MB');
- for(const category of ['maps','scenes','status']){c.explorerState.category=category;c.renderAssetExplorerContent();assert.equal(content.children.length,2);assert.match(content.children[1].textContent,/Nenhum arquivo/);assert.equal(c.explorerState.lifeFields.size,0);}
+ c.tokens=[];c.renderAssetExplorerContent();assert.equal(content.children[1].children.length,2);
+ for(const category of ['maps','scenes','status']){c.explorerState.category=category;c.renderAssetExplorerContent();assert.equal(content.children.length,2);assert.match(content.children[1].textContent,/Nenhum arquivo/);}
 });
-test('health updates and undo refresh only the corresponding Explorer life field',()=>{
- const field={},other={textContent:'10.000 / 10.000'};const info={id:'one',life:6000,maxLife:10000};const token={style:{setProperty(){}}};
- const c=setup({explorerState:{fileSizes:new Map(),lifeFields:new Map([['one',field],['two',other]])},getTokenInfo:()=>info,tokenStatusPanels:new Map(),tokenLifeFormat:new Intl.NumberFormat('pt-BR')});
- vm.runInContext(source('getTokenDamagePercent')+source('updateTokenHealthVisuals'),c);
- c.updateTokenHealthVisuals(token);assert.equal(field.textContent,'6.000 / 10.000');assert.equal(other.textContent,'10.000 / 10.000');
- info.life=7000;c.updateTokenHealthVisuals(token);assert.equal(field.textContent,'7.000 / 10.000');
+test('native image picker resets selections without importing or modifying the catalog',()=>{
+ let clicks=0;const input={value:'previous.png',click(){clicks++}};
+ const c=setup({isMasterMode:()=>true,explorerState:{category:'tokens',fileSizes:new Map()},assetExplorer:{open:true},tokenImagePicker:input});
+ vm.runInContext(source('chooseTokenImage'),c);c.chooseTokenImage();assert.equal(clicks,1);assert.equal(input.value,'');
+ input.value='chosen.gif';c.discardTokenImageSelection=undefined;vm.runInContext(source('discardTokenImageSelection'),c);c.discardTokenImageSelection();assert.equal(input.value,'');
+ c.isMasterMode=()=>false;c.chooseTokenImage();assert.equal(clicks,1);
+ c.isMasterMode=()=>true;c.explorerState.category='maps';c.chooseTokenImage();assert.equal(clicks,1);
+ assert.match(html,/id="token-image-picker"[^>]*type="file"[^>]*accept="image\/\*"/);
+ assert.match(script,/tokenImagePicker\.addEventListener\("change", discardTokenImageSelection\)/);
 });

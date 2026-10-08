@@ -1165,7 +1165,15 @@
       background: linear-gradient(135deg, var(--color-explorer-card), var(--color-explorer-canvas));
       box-shadow: inset 3px 0 12px rgb(0 35 28 / 9%);
     }
-    .asset-explorer__heading { margin: 0 0 var(--space-4); font-size: 0.95rem; }
+    .asset-explorer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+    .asset-explorer__heading { margin: 0; font-size: 0.95rem; }
+    .asset-explorer__add {
+      --color-accent: var(--color-explorer-shell);
+      --color-accent-hover: var(--color-explorer-sidebar);
+      --color-text-inverse: var(--color-explorer-highlight);
+      flex: 0 0 auto; width: 2.25rem; height: 2.25rem; min-height: 0;
+      padding: 0; border-radius: var(--radius-pill); font-size: 1.5rem;
+    }
     .asset-explorer__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3); }
     .asset-explorer__item { min-width: 0; padding: var(--space-3); border-radius: var(--radius-control); border: 1px solid rgb(255 255 255 / 55%); background: var(--color-explorer-card); box-shadow: 0 5px 14px rgb(0 45 37 / 11%), inset 0 1px 0 var(--color-explorer-highlight); }
     .asset-explorer__image { display: block; width: 100%; height: 6rem; object-fit: contain; padding: var(--space-2); border-radius: var(--radius-small); background: radial-gradient(ellipse at top, var(--color-explorer-sidebar), var(--color-explorer-shadow)); }
@@ -1261,7 +1269,7 @@
           <g id="grid-highlight-cells"></g>
           <line id="grid-highlight-guide" class="grid-highlight-guide" data-active="false"/>
         </svg>
-        <article id="token-soldados-01" class="token" data-type="token" data-token-id="soldados-01"
+        <article id="token-soldados-01" class="token" data-type="token" data-token-id="soldados-01" data-token-type="soldiers"
           data-grid-col="0" data-grid-row="0" data-grid-size="1" data-selected="false"
           tabindex="0" role="button" aria-label="Token Soldados 01. Clique para selecionar e redimensionar.">
           <img class="token__image" width="1088" height="1086" src="Midia/Soldados%2001%20PNG.png" alt="Soldados em armadura azul">
@@ -1503,6 +1511,8 @@
           <h2 id="asset-explorer-title">Arquivos do mapa</h2>
           <button id="asset-explorer-close" class="asset-explorer__close" type="button" aria-label="Fechar arquivos">×</button>
         </header>
+        <input id="token-image-picker" type="file" accept="image/*" hidden aria-label="Selecionar imagem de token">
+        <span id="token-image-picker-help" class="sr-only">A importação estará disponível futuramente. Selecionar um arquivo ainda não salva nem adiciona tokens.</span>
         <div class="asset-explorer__body">
           <nav class="asset-explorer__nav" aria-label="Categorias de arquivos">
             <button type="button" data-asset-category="tokens" aria-pressed="true">Tokens</button>
@@ -1541,9 +1551,10 @@
       const explorerHeader = document.getElementById("asset-explorer-header");
       const explorerClose = document.getElementById("asset-explorer-close");
       const explorerContent = document.getElementById("asset-explorer-content");
+      const tokenImagePicker = document.getElementById("token-image-picker");
       const explorerCategories = [...assetExplorer.querySelectorAll("[data-asset-category]")];
       const explorerCorners = [...assetExplorer.querySelectorAll("[data-explorer-corner]")];
-      const explorerState = { category: "tokens", bounds: null, gesture: null, fileSizes: new Map(), lifeFields: new Map() };
+      const explorerState = { category: "tokens", bounds: null, gesture: null, fileSizes: new Map() };
       const toolsMenu = document.getElementById("tools-menu");
       const toolsTrigger = document.getElementById("tools-trigger");
       const toolsPanel = document.getElementById("tools-panel");
@@ -1598,6 +1609,12 @@
       // O caminho fica apenas no elemento original; os clones herdam sua imagem. Mantidos separados no grid para
       // facilitar testes de seleção múltipla, destinos, formação e movimento.
       const firstToken = document.getElementById("token-soldados-01");
+      // Catálogo de TIPOS carregados, independente das instâncias presentes no mapa.
+      // Cada modelo define a imagem, o espaço no grid e a vida inicial dos seus tokens.
+      // Futuras importações devem registrar modelos aqui, sem listar clones no Explorer.
+      const TOKEN_TYPES = Object.freeze(firstToken ? {
+        soldiers: Object.freeze({ id: "soldiers", name: "Soldados", image: firstToken.querySelector(".token__image").getAttribute("src"), gridSize: 1, maxLife: 10000, status: "Normal" })
+      } : {});
       const testTokenLayout = [
         { number: 2, col: 3, row: 1 },
         { number: 3, col: -3, row: -2 },
@@ -1644,8 +1661,11 @@
         if (tokenIds.has(token)) return getTokenInfo(token);
         const id = token.dataset.tokenId;
         if (!id || tokenData.has(id)) throw new Error("ID de token ausente ou duplicado");
-        const info = { life: 10000, maxLife: 10000, status: "Normal" };
+        const type = TOKEN_TYPES[token.dataset.tokenType];
+        const maxLife = type?.maxLife ?? 10000;
+        const info = { life: maxLife, maxLife, status: type?.status ?? "Normal" };
         Object.defineProperty(info, "id", { value: id, enumerable: true });
+        Object.defineProperty(info, "typeId", { value: type?.id ?? null, enumerable: true });
         tokenIds.set(token, id);
         tokenData.set(id, info);
         return info;
@@ -1662,8 +1682,6 @@
       function updateTokenHealthVisuals(token) {
         const info = getTokenInfo(token);
         if (!info) return;
-        const explorerLife = explorerState.lifeFields.get(info.id);
-        if (explorerLife) explorerLife.textContent = `${tokenLifeFormat.format(info.life)} / ${tokenLifeFormat.format(info.maxLife)}`;
         token.style.setProperty("--token-life-remaining", `${100 - getTokenDamagePercent(info)}%`);
         const panel = tokenStatusPanels.get(info.id);
         if (panel) {
@@ -2071,14 +2089,27 @@
 
       function renderAssetExplorerContent() {
         explorerContent.replaceChildren();
-        explorerState.lifeFields.clear();
-        const labels = { tokens: "Tokens", maps: "Mapas", scenes: "Cenas", status: "Status" };
+        const labels = { tokens: "Tipos de token", maps: "Mapas", scenes: "Cenas", status: "Status" };
+        const toolbar = document.createElement("div");
+        toolbar.className = "asset-explorer__toolbar";
         const heading = document.createElement("h3");
         heading.className = "asset-explorer__heading";
         heading.textContent = labels[explorerState.category];
-        explorerContent.append(heading);
+        toolbar.append(heading);
+        if (explorerState.category === "tokens") {
+          const add = document.createElement("button");
+          add.type = "button";
+          add.className = "ui-button--primary asset-explorer__add";
+          add.textContent = "+";
+          add.setAttribute("aria-label", "Selecionar imagem de token");
+          add.setAttribute("aria-describedby", "token-image-picker-help");
+          add.addEventListener("click", chooseTokenImage);
+          toolbar.append(add);
+        }
+        explorerContent.append(toolbar);
         explorerCategories.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.assetCategory === explorerState.category)));
-        if (explorerState.category !== "tokens" || !tokens.length) {
+        const types = Object.values(TOKEN_TYPES);
+        if (explorerState.category !== "tokens" || !types.length) {
           const empty = document.createElement("p");
           empty.className = "asset-explorer__empty";
           empty.textContent = "Nenhum arquivo cadastrado nesta categoria.";
@@ -2087,21 +2118,18 @@
         }
         const list = document.createElement("div");
         list.className = "asset-explorer__list";
-        for (const token of tokens) {
-          const info = getTokenInfo(token);
-          const image = token.querySelector(".token__image");
-          if (!info || !image) continue;
+        for (const type of types) {
           const item = document.createElement("article");
           item.className = "asset-explorer__item";
           const thumbnail = document.createElement("img");
           thumbnail.className = "asset-explorer__image";
-          thumbnail.src = image.currentSrc || image.src;
-          thumbnail.alt = `Token ${info.id}`;
+          thumbnail.src = type.image;
+          thumbnail.alt = type.name;
           thumbnail.loading = "lazy";
           thumbnail.draggable = false;
           const name = document.createElement("h4");
           name.className = "asset-explorer__name";
-          name.textContent = info.id;
+          name.textContent = type.name;
           const details = document.createElement("dl");
           details.className = "asset-explorer__details";
           const addDetail = (label, value) => {
@@ -2112,9 +2140,9 @@
             details.append(row);
             return field;
           };
-          const size = getTokenGridState(token).size;
+          const size = type.gridSize;
           addDetail("Grid", `${size} × ${size}`);
-          explorerState.lifeFields.set(info.id, addDetail("Vida", `${tokenLifeFormat.format(info.life)} / ${tokenLifeFormat.format(info.maxLife)}`));
+          addDetail("Vida inicial", tokenLifeFormat.format(type.maxLife));
           const fileSize = addDetail("Arquivo", "Consultando…");
           getAssetFileSize(thumbnail.src).then(bytes => {
             fileSize.textContent = bytes === null ? "Tamanho indisponível" : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(bytes / 1000000)} MB`;
@@ -2123,6 +2151,18 @@
           list.append(item);
         }
         explorerContent.append(list);
+      }
+
+      function chooseTokenImage() {
+        if (!isMasterMode() || !assetExplorer.open || explorerState.category !== "tokens") return;
+        tokenImagePicker.value = "";
+        tokenImagePicker.click();
+      }
+
+      function discardTokenImageSelection() {
+        // Protótipo: não lê o arquivo, não faz upload e não altera o catálogo/mapa.
+        // Limpar permite escolher o mesmo arquivo novamente sem guardar a seleção.
+        tokenImagePicker.value = "";
       }
 
       function openAssetExplorer() {
@@ -2148,7 +2188,7 @@
         const wasOpen = assetExplorer.open;
         finishExplorerGesture();
         if (wasOpen) assetExplorer.close();
-        explorerState.lifeFields.clear();
+        discardTokenImageSelection();
         if (wasOpen && restoreFocus && isMasterMode()) masterFilesButton.focus({ preventScroll: true });
       }
 
@@ -2506,6 +2546,8 @@
       toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
       masterFilesButton.addEventListener("click", openAssetExplorer);
+      tokenImagePicker.addEventListener("change", discardTokenImageSelection);
+      tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
       explorerClose.addEventListener("click", () => closeAssetExplorer());
       explorerCategories.forEach(button => button.addEventListener("click", () => {
         explorerState.category = button.dataset.assetCategory;
