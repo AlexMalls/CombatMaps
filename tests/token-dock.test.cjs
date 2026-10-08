@@ -31,7 +31,7 @@ test('new instances receive unique IDs even after their previous instances are u
  const a=c.nextTokenId('soldiers');c.tokenData.set(a,{});const b=c.nextTokenId('soldiers');assert.notEqual(a,b);assert.notEqual(a,'soldiers-01');
 });
 test('master pawn toggles the dock and disabled master mode prevents opening',()=>{
- const c=context({tokenDock:{dataset:{},contains:()=>false},tokenDockList:{querySelectorAll:()=>[]},masterTokenButton:{setAttribute(k,v){this[k]=v},focus(){}},cancelTokenDockDrag(){},document:{activeElement:null}});
+ const c=context({tokenDock:{dataset:{},contains:()=>false},tokenDockList:{querySelectorAll:()=>[]},masterTokenButton:{setAttribute(k,v){this[k]=v},focus(){}},setSceneDockOpen(){},cancelTokenDockDrag(){},document:{activeElement:null}});
  vm.runInContext(source('syncTokenDockAvailability')+source('setTokenDockOpen'),c);
  c.setTokenDockOpen(true);assert.equal(c.tokenDock.dataset.open,'true');assert.equal(c.tokenDock.inert,false);
  c.setTokenDockOpen(false);assert.equal(c.tokenDock.inert,true);assert.equal(c.masterTokenButton['aria-expanded'],'false');
@@ -90,7 +90,7 @@ test('created units are fully initialized and undo/redo preserve canonical ident
   movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,tokenDockStatus:{},
   initializeTokenDamage(t){t.damageInitialized=true},initializeTokenInteraction(t){t.interactionInitialized=true},updateTokenGeometry(t){t.positioned=true},
   updateMovementHistoryUI(){},cancelWorkspaceGestures(){},deselectToken(){},closeTokenStatus(){},updateAllTokens(){},debugLog(){}});
- for(const name of ['registerTokenData','getTokenInfo','createTokenFromType','undoLastMovement','redoLastMovement'])vm.runInContext(source(name),c);
+ for(const name of ['registerTokenData','getTokenInfo','buildTokenInstance','createTokenFromType','undoLastMovement','redoLastMovement'])vm.runInContext(source(name),c);
  const t=c.createTokenFromType('soldiers',{col:2,row:2,size:1});assert.ok(t.damageInitialized&&t.interactionInitialized&&t.positioned);assert.equal(t.dataset.selected,'false');
  const info=c.getTokenInfo(t);assert.equal(info.life,10000);assert.equal(info.typeId,'soldiers');assert.equal(c.tokens.length,1);assert.equal(c.movementHistory[0].kind,'spawn');
  assert.equal(c.undoLastMovement(),true);assert.equal(c.tokens.length,0);assert.equal(t.isConnected,false);assert.equal(c.getTokenInfo(t),info);

@@ -498,6 +498,9 @@
       transform: translate(0, 0) scale(1);
     }
 
+    .scene-background-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--color-background); }
+    .scene-background-layer img { position: absolute; object-fit: fill; }
+
     .background-layer {
       position: absolute;
       inset: 0;
@@ -1145,8 +1148,11 @@
     .token-dock[data-open="true"] { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
     .token-dock__list { display: flex; align-items: center; gap: var(--space-3); overflow-x: auto; min-height: 5.5rem; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x; }
     .token-dock__item { flex: 0 0 auto; flex-direction: column; width: 4.75rem; min-height: 5rem; padding: var(--space-1); font-size: 0.7rem; touch-action: none; user-select: none; cursor: grab; }
+    .token-dock__item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scene-dock__item { width: 7rem; cursor: pointer; touch-action: manipulation; }
+    .scene-dock__item[aria-pressed="true"] { border-color: var(--color-text); }
     .token-dock__item:active { cursor: grabbing; }
-    .token-dock__item img { width: 3rem; height: 3rem; object-fit: contain; pointer-events: none; }
+    .token-dock__item :is(img, svg) { width: 3rem; height: 3rem; object-fit: contain; pointer-events: none; }
     .token-dock__empty { font-size: var(--font-size-small); color: var(--color-text-muted); }
     .token-dock-ghost { position: fixed; z-index: var(--z-tooltip); pointer-events: none; opacity: 0.7; border: 1px solid var(--color-accent); border-radius: 0.25rem; background: var(--color-highlight-soft); box-shadow: 0 0 18px var(--color-magic-halo); }
     .token-dock-ghost[data-valid="false"] { border-color: var(--color-danger); opacity: 0.4; }
@@ -1323,7 +1329,8 @@
         <div id="camera-stage" class="camera-stage">
 
       <!-- LAYER 0: BACKGROUND — manter isolada e intocada por recursos futuros. -->
-      <div class="background-layer" aria-hidden="true"></div>
+      <div id="default-universe-layer" class="background-layer" aria-hidden="true"></div>
+      <div id="scene-background-layer" class="scene-background-layer" aria-hidden="true" hidden><img id="active-scene-background" alt="" draggable="false"></div>
 
       <!-- LAYER 1: GRID — independente do background. -->
       <div id="workspace-grid" class="workspace-grid" data-visible="true" aria-hidden="true"></div>
@@ -1426,6 +1433,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v2M3 7h7l2 3h9l-2 10H3Z"/>
         </svg>
+      </button>
+      <button id="master-scenes" class="ui-tool" type="button" aria-label="Barra de cenas" aria-expanded="false" aria-controls="scene-dock">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
       </button>
       <span id="master-files-help" class="sr-only">Abrir o explorador de arquivos carregados no mapa.</span>
       <button id="master-token" class="ui-tool" type="button" aria-label="Barra de tokens" aria-expanded="false" aria-controls="token-dock">
@@ -1577,6 +1587,9 @@
       <section id="token-dock" class="token-dock" data-open="false" aria-label="Modelos de token para adicionar ao mapa" inert>
         <div id="token-dock-list" class="token-dock__list"></div>
       </section>
+      <section id="scene-dock" class="token-dock scene-dock" data-open="false" aria-label="Cenas disponíveis" inert>
+        <div id="scene-dock-list" class="token-dock__list"></div>
+      </section>
       <p id="token-dock-status" class="sr-only" role="status" aria-live="polite"></p>
 
       <dialog id="asset-explorer" class="asset-explorer" aria-labelledby="asset-explorer-title">
@@ -1610,6 +1623,7 @@
           <section class="scene-editor__preview-pane" aria-label="Prévia da cena">
             <div id="scene-preview" class="scene-preview">
               <div id="scene-preview-stage" class="scene-preview__stage">
+                <div id="scene-preview-universe" class="background-layer" aria-hidden="true"></div>
                 <div id="scene-image-box" class="scene-preview__image-box" hidden>
                   <img id="scene-background" class="scene-preview__image" alt="Background da nova cena" draggable="false">
                   <button id="scene-image-resize" class="scene-preview__resize" type="button" aria-label="Redimensionar background pelo canto inferior direito"></button>
@@ -1619,6 +1633,8 @@
             </div>
           </section>
           <aside class="asset-explorer__content scene-editor__settings" aria-label="Configurações da nova cena">
+            <label for="scene-name">Nome da cena</label>
+            <input id="scene-name" type="text" maxlength="80" placeholder="Nome da cena" autocomplete="off">
             <button id="scene-choose-background" type="button">Escolher background</button>
             <input id="scene-background-picker" type="file" accept="image/*" hidden>
             <p id="scene-background-name" class="scene-editor__filename">Nenhuma imagem selecionada</p>
@@ -1654,6 +1670,13 @@
       const masterTokenButton = document.getElementById("master-token");
       const tokenDock = document.getElementById("token-dock");
       const tokenDockList = document.getElementById("token-dock-list");
+      const masterScenesButton = document.getElementById("master-scenes");
+      const sceneDock = document.getElementById("scene-dock");
+      const sceneDockList = document.getElementById("scene-dock-list");
+      const defaultUniverseLayer = document.getElementById("default-universe-layer");
+      const sceneBackgroundLayer = document.getElementById("scene-background-layer");
+      const activeSceneBackground = document.getElementById("active-scene-background");
+      const universeImageUrl = getComputedStyle(document.documentElement).getPropertyValue("--media-universe").trim().replace(/^url\(["']?|["']?\)$/g, "");
       const tokenDockStatus = document.getElementById("token-dock-status");
       let tokenDockDrag = null;
       let nextTokenInstanceId = 1;
@@ -1662,12 +1685,15 @@
       const explorerClose = document.getElementById("asset-explorer-close");
       const explorerContent = document.getElementById("asset-explorer-content");
       const tokenImagePicker = document.getElementById("token-image-picker");
-      // Cenas locais desta sessão. Criar não altera nem carrega o mapa atual.
+      // Cenas locais desta sessão: cada uma mantém seus tokens e seu histórico.
+      let activeSceneId = null;
       const scenes = [];
       let nextSceneId = 1;
       const sceneEditor = document.getElementById("scene-editor");
       const scenePreview = document.getElementById("scene-preview");
       const scenePreviewStage = document.getElementById("scene-preview-stage");
+      const sceneNameInput = document.getElementById("scene-name");
+      const scenePreviewUniverse = document.getElementById("scene-preview-universe");
       const scenePreviewGrid = document.getElementById("scene-preview-grid");
       const sceneImageBox = document.getElementById("scene-image-box");
       const sceneBackground = document.getElementById("scene-background");
@@ -2157,6 +2183,7 @@
         masterMode: true,
         masterMenuOpen: false,
         tokenDockOpen: false,
+        sceneDockOpen: false,
         touchMode: touchCapable,
         visible: true,
         absolute: false,
@@ -2180,6 +2207,7 @@
 
       function setTokenDockOpen(open, { restoreFocus = false } = {}) {
         state.tokenDockOpen = isMasterMode() && Boolean(open);
+        if (state.tokenDockOpen) setSceneDockOpen(false);
         if (!state.tokenDockOpen) {
           cancelTokenDockDrag();
           if (restoreFocus || tokenDock.contains(document.activeElement)) masterTokenButton.focus({ preventScroll: true });
@@ -2243,9 +2271,9 @@
         return id;
       }
 
-      function createTokenFromType(typeId, cell) {
+      function buildTokenInstance(typeId, cell) {
         const type = TOKEN_TYPES[typeId];
-        if (!isMasterMode() || hasPriorityTool() || state.isMoving || !type || !cell || !canPlaceTokenFootprint(cell)) return null;
+        if (!type || !cell) return null;
         const token = document.createElement("article");
         const id = nextTokenId(typeId);
         token.id = `token-${id}`;
@@ -2271,11 +2299,19 @@
             token.append(handle);
           }
         }
-        workspaceLayers.append(token);
-        tokens.push(token);
         registerTokenData(token);
         initializeTokenDamage(token);
         initializeTokenInteraction(token);
+        return token;
+      }
+
+      function createTokenFromType(typeId, cell) {
+        const type = TOKEN_TYPES[typeId];
+        if (!isMasterMode() || hasPriorityTool() || state.isMoving || !type || !cell || !canPlaceTokenFootprint(cell)) return null;
+        const token = buildTokenInstance(typeId, cell);
+        const id = getTokenInfo(token).id;
+        workspaceLayers.append(token);
+        tokens.push(token);
         updateTokenGeometry(token);
         movementRedoHistory.length = 0;
         movementHistory.push({ kind: "spawn", token, tokenId: id, cell: { ...cell } });
@@ -2485,6 +2521,122 @@
         tokenImagePicker.click();
       }
 
+      function fitSceneImageForViewport(rect, canvas, width, height) {
+        const scale = Math.min(width / canvas.width, height / canvas.height);
+        return { x: (width - canvas.width * scale) / 2 + rect.x * scale, y: (height - canvas.height * scale) / 2 + rect.y * scale, width: rect.width * scale, height: rect.height * scale };
+      }
+
+      function getSceneGridSettings() {
+        return { visible: state.visible, absolute: state.absolute, distance: state.distance, opacity: state.opacity, size: state.size };
+      }
+
+      function initializeDefaultScenes() {
+        const canvas = { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) };
+        const defaults = { canvas, grid: getSceneGridSettings(), backgroundUrl: "", fileName: "", fileSize: 0, imageRect: null };
+        scenes.push({ ...defaults, id: "scene-default", name: "Universo padrão", workspaceTokens: tokens.slice() });
+        const formation = [[-1, -2], [0, -2], [1, -2], [2, -2], [-1, -1], [0, -1], [1, -1]];
+        scenes.push({ ...defaults, canvas: { ...canvas }, grid: { ...defaults.grid }, id: "scene-test", name: "Formação de teste", workspaceTokens: formation.map(([col, row]) => buildTokenInstance("soldiers", { col, row, size: 1 })) });
+        activeSceneId = "scene-default";
+        renderSceneDock();
+      }
+
+      function syncSceneDockAvailability() {
+        sceneDockList.querySelectorAll("button").forEach(button => { button.disabled = !isMasterMode() || state.isMoving; });
+      }
+
+      function setSceneDockOpen(open, { restoreFocus = false } = {}) {
+        state.sceneDockOpen = isMasterMode() && Boolean(open);
+        if (state.sceneDockOpen) setTokenDockOpen(false);
+        if (!state.sceneDockOpen && (restoreFocus || sceneDock.contains(document.activeElement))) masterScenesButton.focus({ preventScroll: true });
+        sceneDock.dataset.open = String(state.sceneDockOpen);
+        sceneDock.inert = !state.sceneDockOpen;
+        masterScenesButton.setAttribute("aria-expanded", String(state.sceneDockOpen));
+        syncSceneDockAvailability();
+      }
+
+      function renderSceneDock() {
+        sceneDockList.replaceChildren();
+        scenes.forEach(scene => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "token-dock__item scene-dock__item";
+          button.setAttribute("aria-label", `Carregar cena ${scene.name}`);
+          button.setAttribute("aria-pressed", String(scene.id === activeSceneId));
+          const label = document.createElement("span"); label.textContent = scene.name;
+          button.append(createSceneThumbnail(scene, "dock"), label);
+          button.addEventListener("click", () => loadScene(scene.id));
+          sceneDockList.append(button);
+        });
+        syncSceneDockAvailability();
+      }
+
+      function renderActiveSceneBackground() {
+        const scene = scenes.find(item => item.id === activeSceneId);
+        const custom = Boolean(scene?.backgroundUrl && scene.imageRect);
+        defaultUniverseLayer.hidden = custom;
+        sceneBackgroundLayer.hidden = !custom;
+        if (!custom) { activeSceneBackground.removeAttribute("src"); return; }
+        if (activeSceneBackground.getAttribute("src") !== scene.backgroundUrl) activeSceneBackground.src = scene.backgroundUrl;
+        const rect = fitSceneImageForViewport(scene.imageRect, scene.canvas, workspaceLayers.clientWidth, workspaceLayers.clientHeight);
+        Object.assign(activeSceneBackground.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+      }
+
+      function settleSceneTokenDeaths() {
+        tokens.forEach(token => {
+          cancelTokenDeath(token);
+          if (getTokenInfo(token)?.life <= 0) {
+            token.dataset.dead = "true";
+            token.setAttribute("aria-hidden", "true");
+            token.tabIndex = -1;
+          }
+        });
+      }
+
+      function loadScene(id) {
+        const scene = scenes.find(item => item.id === id);
+        if (!isMasterMode() || state.isMoving || sceneEditor.open || !scene || id === activeSceneId) return false;
+        cancelWorkspaceGestures("troca de cena");
+        clearTokenSelection();
+        closeAllTokenStatus();
+        clearAllGridPoints();
+        clearGridHighlights();
+        settleSceneTokenDeaths();
+        const previous = scenes.find(item => item.id === activeSceneId);
+        if (previous) {
+          previous.workspaceTokens = tokens.slice();
+          previous.grid = getSceneGridSettings();
+          previous.history = { undo: movementHistory.slice(), redo: movementRedoHistory.slice() };
+          previous.geometry = appliedWorkspaceGeometry;
+        }
+        tokens.forEach(token => token.remove());
+        tokens.splice(0, tokens.length, ...(scene.workspaceTokens || []));
+        tokens.forEach(token => workspaceLayers.append(token));
+        activeSceneId = scene.id;
+        movementHistory.length = 0;
+        movementRedoHistory.length = 0;
+        setVisible(scene.grid.visible);
+        setAbsolute(scene.grid.absolute);
+        distanceControl.set(scene.grid.distance);
+        opacityControl.set(scene.grid.opacity);
+        const previousCells = tokens.map(getTokenGridState);
+        sizeControl.set(scene.grid.size);
+        const relocated = tokens.some((token, index) => {
+          const cell = getTokenGridState(token), before = previousCells[index];
+          return cell.col !== before.col || cell.row !== before.row || cell.size !== before.size;
+        });
+        const compatible = !relocated && (!scene.geometry || scene.geometry === appliedWorkspaceGeometry);
+        const restore = list => (list || []).filter(record => compatible || record.kind === "health");
+        movementHistory.push(...restore(scene.history?.undo));
+        movementRedoHistory.push(...restore(scene.history?.redo));
+        setCameraTransform(1, 0, 0);
+        updateAllTokens();
+        renderActiveSceneBackground();
+        updateMovementHistoryUI();
+        renderSceneDock();
+        tokenDockStatus.textContent = `Cena ${scene.name} carregada.`;
+        return true;
+      }
+
       function fitSceneBackground(imageWidth, imageHeight, width, height) {
         const scale = Math.min(width / imageWidth, height / imageHeight);
         return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, width: imageWidth * scale, height: imageHeight * scale };
@@ -2540,9 +2692,10 @@
         scenePreviewGrid.dataset.visible = String(sceneGridSettings.visible);
         scenePreviewGrid.style.setProperty("--grid-spacing", `${sceneGridSettings.size}px`);
         scenePreviewGrid.style.setProperty("--grid-opacity", String(sceneGridSettings.opacity / 100));
+        scenePreviewUniverse.hidden = Boolean(draft.backgroundUrl);
         sceneImageBox.hidden = !draft.backgroundUrl;
         if (draft.imageRect) Object.assign(sceneImageBox.style, { left: `${draft.imageRect.x}px`, top: `${draft.imageRect.y}px`, width: `${draft.imageRect.width}px`, height: `${draft.imageRect.height}px` });
-        sceneBackgroundName.textContent = draft.fileName || "Nenhuma imagem selecionada";
+        sceneBackgroundName.textContent = draft.fileName || "Universo padrão";
       }
 
       function openSceneEditor() {
@@ -2550,6 +2703,7 @@
         cancelWorkspaceGestures("nova cena");
         Object.keys(sceneGridSettings).forEach(key => { sceneGridSettings[key] = state[key]; });
         sceneEditorState.draft = { canvas: { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) }, backgroundUrl: "", fileName: "", fileSize: 0, imageRect: null, loading: false };
+        sceneNameInput.value = "";
         sceneEditorError.textContent = "";
         sceneConfirm.disabled = false;
         sceneBackground.removeAttribute("src");
@@ -2643,15 +2797,16 @@
         if (!draft || draft.loading || !sceneEditor.open || !isMasterMode()) return;
         sceneControls.forEach(({ control }) => control.commit());
         const id = nextSceneId++;
-        scenes.push({ id: `scene-${id}`, name: draft.fileName.replace(/\.[^.]+$/, "") || `Cena ${id}`, canvas: { ...draft.canvas }, grid: { ...sceneGridSettings }, backgroundUrl: draft.backgroundUrl, fileName: draft.fileName, fileSize: draft.fileSize, imageRect: draft.imageRect ? { ...draft.imageRect } : null });
+        scenes.push({ id: `scene-${id}`, name: sceneNameInput.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || `Cena ${id}`, canvas: { ...draft.canvas }, grid: { ...sceneGridSettings }, backgroundUrl: draft.backgroundUrl, fileName: draft.fileName, fileSize: draft.fileSize, imageRect: draft.imageRect ? { ...draft.imageRect } : null });
         // Transfere a imagem para a cena; fechar o rascunho não deve descartá-la.
         draft.backgroundUrl = "";
         closeSceneEditor();
         explorerState.category = "scenes";
         renderAssetExplorerContent();
+        renderSceneDock();
       }
 
-      function createSceneThumbnail(scene) {
+      function createSceneThumbnail(scene, scope = "catalog") {
         const ns = "http://www.w3.org/2000/svg";
         const create = (tag, attributes) => {
           const node = document.createElementNS(ns, tag);
@@ -2660,11 +2815,12 @@
         };
         const svg = create("svg", { viewBox: `0 0 ${scene.canvas.width} ${scene.canvas.height}`, role: "img", "aria-label": `Prévia de ${scene.name}`, class: "asset-explorer__image" });
         svg.append(create("rect", { width: "100%", height: "100%", fill: "var(--color-background)" }));
+        if (!scene.backgroundUrl) svg.append(create("image", { href: universeImageUrl, width: "100%", height: "100%", preserveAspectRatio: "xMidYMid slice" }));
         if (scene.backgroundUrl && scene.imageRect) svg.append(create("image", { href: scene.backgroundUrl, ...scene.imageRect, preserveAspectRatio: "none" }));
         if (scene.grid.visible) {
-          const pattern = create("pattern", { id: `preview-${scene.id}`, width: scene.grid.size, height: scene.grid.size, patternUnits: "userSpaceOnUse", x: (scene.canvas.width - scene.grid.size) / 2, y: (scene.canvas.height - scene.grid.size) / 2 });
+          const pattern = create("pattern", { id: `preview-${scope}-${scene.id}`, width: scene.grid.size, height: scene.grid.size, patternUnits: "userSpaceOnUse", x: (scene.canvas.width - scene.grid.size) / 2, y: (scene.canvas.height - scene.grid.size) / 2 });
           pattern.append(create("path", { d: `M ${scene.grid.size} 0 H 0 V ${scene.grid.size}`, fill: "none", stroke: "white", "stroke-width": 1 }));
-          const defs = create("defs", {}); defs.append(pattern); svg.append(defs, create("rect", { width: "100%", height: "100%", fill: `url(#preview-${scene.id})`, opacity: scene.grid.opacity / 100 }));
+          const defs = create("defs", {}); defs.append(pattern); svg.append(defs, create("rect", { width: "100%", height: "100%", fill: `url(#preview-${scope}-${scene.id})`, opacity: scene.grid.opacity / 100 }));
         }
         return svg;
       }
@@ -2675,7 +2831,7 @@
           const item = document.createElement("article"); item.className = "asset-explorer__item";
           const name = document.createElement("h4"); name.className = "asset-explorer__name"; name.textContent = scene.name;
           const details = document.createElement("p"); details.className = "asset-explorer__details";
-          details.textContent = `${scene.fileName || "Sem background"} · Grid: ${scene.grid.size} px · Distância: ${numberFormat.format(scene.grid.distance)} · Opacidade: ${scene.grid.opacity}%`;
+          details.textContent = `${scene.fileName || "Universo padrão"} · Grid: ${scene.grid.size} px · Distância: ${numberFormat.format(scene.grid.distance)} · Opacidade: ${scene.grid.opacity}%`;
           item.append(createSceneThumbnail(scene), name, details); list.append(item);
         });
         explorerContent.append(list);
@@ -2749,6 +2905,7 @@
         if (!state.masterMode) {
           state.masterMenuOpen = false;
           setTokenDockOpen(false, { restoreFocus: false });
+          setSceneDockOpen(false, { restoreFocus: false });
           closeSceneEditor({ restoreFocus: false });
           closeAssetExplorer({ restoreFocus: false });
           if (masterMenu.contains(document.activeElement)) masterModeCheckbox.focus({ preventScroll: true });
@@ -2775,6 +2932,7 @@
 
       function syncToolsUI() {
         syncTokenDockAvailability();
+        syncSceneDockAvailability();
         toolsMenu.dataset.open = String(state.toolsOpen);
         toolsTrigger.setAttribute("aria-expanded", String(state.toolsOpen));
         toolsPanel.inert = !state.toolsOpen;
@@ -3077,6 +3235,7 @@
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
       masterFilesButton.addEventListener("click", openAssetExplorer);
       masterTokenButton.addEventListener("click", () => setTokenDockOpen(!state.tokenDockOpen));
+      masterScenesButton.addEventListener("click", () => setSceneDockOpen(!state.sceneDockOpen));
       renderTokenDock();
       tokenImagePicker.addEventListener("change", discardTokenImageSelection);
       tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
@@ -6010,6 +6169,7 @@
         state.cameraY = position.y;
         scheduleCameraTransform();
         updateAllTokens();
+        renderActiveSceneBackground();
       }
       window.addEventListener("resize", handleWorkspaceResize);
       if ("ResizeObserver" in window) new ResizeObserver(handleWorkspaceResize).observe(cameraViewport);
@@ -6078,6 +6238,10 @@
 
         if (event.key !== "Escape") return;
         let handled = false;
+        if (state.sceneDockOpen) {
+          setSceneDockOpen(false, { restoreFocus: true });
+          handled = true;
+        }
         if (state.tokenDockOpen) {
           setTokenDockOpen(false, { restoreFocus: true });
           handled = true;
@@ -6125,6 +6289,7 @@
       setVisible(state.visible);
       setAbsolute(state.absolute);
       updateAllTokens();
+      initializeDefaultScenes();
 
       // Integração opcional com agentes em navegadores que suportam WebMCP.
       const modelContext = document.modelContext;

@@ -29,7 +29,7 @@ function sceneContext(){
   sceneEditorState:{draft:{canvas:{width:800,height:400},backgroundUrl:'',fileName:'',fileSize:0,imageRect:null,loading:false},loadVersion:0,pendingUrl:null,gesture:null,scale:0.5},
   sceneControls:[],sceneConfirm:{},sceneBackgroundPicker:{value:'file'},sceneEditorError:{},sceneBackground:{removeAttribute(){}},
   sceneImageBox:{setPointerCapture(id){c.captured=id},hasPointerCapture:id=>c.captured===id,releasePointerCapture(){c.captured=null}},
-  scenes:[],nextSceneId:1,explorerState:{category:'scenes'},renderScenePreview(){c.renders=(c.renders||0)+1},renderAssetExplorerContent(){c.catalogRendered=true}});
+  sceneNameInput:{value:""},renderSceneDock(){},scenes:[],nextSceneId:1,explorerState:{category:'scenes'},renderScenePreview(){c.renders=(c.renders||0)+1},renderAssetExplorerContent(){c.catalogRendered=true}});
  for(const name of ['fitSceneBackground','resizeSceneBackground','moveSceneBackground','selectSceneBackground','finishSceneImageGesture','beginSceneImageGesture','moveSceneImageGesture','closeSceneEditor','confirmScene'])vm.runInContext(source(name),c);
  c.revoked=revoked;c.images=images;c.select=name=>c.selectSceneBackground({target:{files:[{name,type:'image/png',size:1234}]}});return c;
 }
@@ -72,4 +72,7 @@ test('shared numeric controls update scene defaults without mutating the current
  vm.runInContext(source('parseNumber')+source('createNumericControl'),c);
  c.options={rangeId:'range',valueId:'input',stateKey:'size',targetState:c.scene,format:v=>({input:String(v),aria:String(v)}),apply(){}};
  vm.runInContext('const control=createNumericControl(options);control.set(83)',c);assert.equal(c.scene.size,83);assert.equal(c.state.size,48);assert.equal(input.value,'83');
+});
+test('scene name is trimmed, saved independently of image filename and optional',()=>{
+ const c=sceneContext();c.sceneNameInput.value='  Fortaleza  ';c.confirmScene();assert.equal(c.scenes[0].name,'Fortaleza');assert.equal(c.scenes[0].backgroundUrl,'');assert.equal(c.scenes[0].grid.size,64);
 });
