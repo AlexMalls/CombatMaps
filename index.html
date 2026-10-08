@@ -94,6 +94,16 @@
       --color-info: #a0d2df;
       --color-info-bg: #15363b;
 
+      /* Explorer: variante da paleta inicial, compartilhada por toda a janela. */
+      --color-explorer-shell: #003d3d;
+      --color-explorer-shadow: #002c2c;
+      --color-explorer-sidebar: #07504b;
+      --color-explorer-canvas: #b7cbc5;
+      --color-explorer-card: #d3e9e2;
+      --color-explorer-highlight: #e7fff3;
+      --color-explorer-ink: #073d38;
+      --color-explorer-muted: #426c62;
+
       /* Slider, checkbox e grid */
       --color-track: #285048;
       --color-thumb: #c9ecdc;
@@ -1108,6 +1118,74 @@
     :is(.grid-settings__slider-row, .app-settings__slider-row) input[type="range"] { flex: 1; }
     :is(.grid-settings__slider-row, .app-settings__slider-row) .ui-value { flex: 0 0 4.125rem; }
 
+    /* Variante do painel geral: cores locais, controles continuam compartilhados. */
+    .asset-explorer {
+      --color-text: var(--color-explorer-highlight);
+      --color-text-muted: #a9cfc0;
+      --color-popup: var(--color-explorer-shell);
+      --color-dialog: var(--color-explorer-shell);
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      padding: 0;
+      max-width: none;
+      max-height: none;
+      overflow: hidden;
+      z-index: var(--z-dialog);
+      border-color: rgb(204 255 229 / 24%);
+      background: linear-gradient(135deg, var(--color-explorer-sidebar), var(--color-explorer-shadow));
+      box-shadow: 0 24px 70px rgb(0 15 14 / 55%), 0 5px 0 rgb(0 22 20 / 30%), inset 0 1px 0 rgb(231 255 243 / 16%);
+    }
+    .asset-explorer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .asset-explorer__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid rgb(207 255 229 / 12%);
+      cursor: move;
+      touch-action: none;
+      user-select: none;
+    }
+    .asset-explorer__header h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+    .asset-explorer__close { width: 2.25rem; min-height: 2.25rem; padding: 0; font-size: 1.35rem; }
+    .asset-explorer__body { min-height: 0; display: grid; grid-template-columns: clamp(6.5rem, 22%, 10rem) minmax(0, 1fr); }
+    .asset-explorer__nav { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); overflow-y: auto; background: linear-gradient(180deg, rgb(7 80 75 / 65%), var(--color-explorer-shadow)); }
+    .asset-explorer__nav button { justify-content: flex-start; text-align: left; padding: var(--space-2) var(--space-3); min-width: 0; font-size: var(--font-size-small); }
+    .asset-explorer__nav button[aria-pressed="true"] { background: var(--color-explorer-card); color: var(--color-explorer-ink); border-color: var(--color-explorer-highlight); box-shadow: var(--shadow-control); }
+    .asset-explorer__content {
+      --color-text: var(--color-explorer-ink);
+      --color-text-muted: var(--color-explorer-muted);
+      min-width: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding: var(--space-4);
+      color: var(--color-text);
+      background: linear-gradient(135deg, var(--color-explorer-card), var(--color-explorer-canvas));
+      box-shadow: inset 3px 0 12px rgb(0 35 28 / 9%);
+    }
+    .asset-explorer__heading { margin: 0 0 var(--space-4); font-size: 0.95rem; }
+    .asset-explorer__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3); }
+    .asset-explorer__item { min-width: 0; padding: var(--space-3); border-radius: var(--radius-control); border: 1px solid rgb(255 255 255 / 55%); background: var(--color-explorer-card); box-shadow: 0 5px 14px rgb(0 45 37 / 11%), inset 0 1px 0 var(--color-explorer-highlight); }
+    .asset-explorer__image { display: block; width: 100%; height: 6rem; object-fit: contain; padding: var(--space-2); border-radius: var(--radius-small); background: radial-gradient(ellipse at top, var(--color-explorer-sidebar), var(--color-explorer-shadow)); }
+    .asset-explorer__name { margin: var(--space-3) 0 var(--space-2); overflow-wrap: anywhere; font-size: var(--font-size-label); }
+    .asset-explorer__details { margin: 0; font-size: 0.75rem; color: var(--color-text-muted); }
+    .asset-explorer__details div { margin-top: var(--space-1); }
+    .asset-explorer__details dt, .asset-explorer__details dd { display: inline; margin: 0; }
+    .asset-explorer__details dt::after { content: ": "; }
+    .asset-explorer__empty { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-label); }
+    .asset-explorer__corner {
+      position: absolute; width: 24px; height: 24px; min-height: 0; padding: 0;
+      border: 0; border-radius: 0; background: transparent; box-shadow: none;
+      touch-action: none; z-index: 1;
+    }
+    .asset-explorer__corner:hover { background: rgb(172 214 198 / 15%); transform: none; }
+    .asset-explorer__corner[data-explorer-corner="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+    .asset-explorer__corner[data-explorer-corner="ne"] { top: 0; right: 0; cursor: nesw-resize; }
+    .asset-explorer__corner[data-explorer-corner="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
+    .asset-explorer__corner[data-explorer-corner="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
+
     .debug-dialog {
       width: min(52rem, calc(100vw - 2rem));
       max-width: min(52rem, calc(100vw - 2rem));
@@ -1273,7 +1351,12 @@
           <path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v2M3 7h7l2 3h9l-2 10H3Z"/>
         </svg>
       </button>
-      <span id="master-files-help" class="sr-only">Nenhum arquivo importado. A importação será adicionada futuramente.</span>
+      <span id="master-files-help" class="sr-only">Abrir o explorador de arquivos carregados no mapa.</span>
+      <button id="master-token" class="ui-tool" type="button" aria-label="Tokens — em breve" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="5" r="3"/><path d="M8 10h8M10 10c0 5-2 6-3 8h10c-1-2-3-3-3-8M6 21h12l-1-3H7z"/>
+        </svg>
+      </button>
     </section>
   </aside>
 
@@ -1415,6 +1498,26 @@
     </section>
   </main>
 
+      <dialog id="asset-explorer" class="asset-explorer" aria-labelledby="asset-explorer-title">
+        <header id="asset-explorer-header" class="asset-explorer__header">
+          <h2 id="asset-explorer-title">Arquivos do mapa</h2>
+          <button id="asset-explorer-close" class="asset-explorer__close" type="button" aria-label="Fechar arquivos">×</button>
+        </header>
+        <div class="asset-explorer__body">
+          <nav class="asset-explorer__nav" aria-label="Categorias de arquivos">
+            <button type="button" data-asset-category="tokens" aria-pressed="true">Tokens</button>
+            <button type="button" data-asset-category="maps" aria-pressed="false">Mapas</button>
+            <button type="button" data-asset-category="scenes" aria-pressed="false">Cenas</button>
+            <button type="button" data-asset-category="status" aria-pressed="false">Status</button>
+          </nav>
+          <section id="asset-explorer-content" class="asset-explorer__content" aria-label="Arquivos da categoria"></section>
+        </div>
+        <button type="button" class="asset-explorer__corner" data-explorer-corner="nw" aria-label="Redimensionar pelo canto superior esquerdo"></button>
+        <button type="button" class="asset-explorer__corner" data-explorer-corner="ne" aria-label="Redimensionar pelo canto superior direito"></button>
+        <button type="button" class="asset-explorer__corner" data-explorer-corner="sw" aria-label="Redimensionar pelo canto inferior esquerdo"></button>
+        <button type="button" class="asset-explorer__corner" data-explorer-corner="se" aria-label="Redimensionar pelo canto inferior direito"></button>
+      </dialog>
+
   <script>
     "use strict";
     (() => {
@@ -1433,6 +1536,14 @@
       const masterMenu = document.getElementById("master-menu");
       const masterTrigger = document.getElementById("master-trigger");
       const masterPanel = document.getElementById("master-panel");
+      const masterFilesButton = document.getElementById("master-files");
+      const assetExplorer = document.getElementById("asset-explorer");
+      const explorerHeader = document.getElementById("asset-explorer-header");
+      const explorerClose = document.getElementById("asset-explorer-close");
+      const explorerContent = document.getElementById("asset-explorer-content");
+      const explorerCategories = [...assetExplorer.querySelectorAll("[data-asset-category]")];
+      const explorerCorners = [...assetExplorer.querySelectorAll("[data-explorer-corner]")];
+      const explorerState = { category: "tokens", bounds: null, gesture: null, fileSizes: new Map(), lifeFields: new Map() };
       const toolsMenu = document.getElementById("tools-menu");
       const toolsTrigger = document.getElementById("tools-trigger");
       const toolsPanel = document.getElementById("tools-panel");
@@ -1551,6 +1662,8 @@
       function updateTokenHealthVisuals(token) {
         const info = getTokenInfo(token);
         if (!info) return;
+        const explorerLife = explorerState.lifeFields.get(info.id);
+        if (explorerLife) explorerLife.textContent = `${tokenLifeFormat.format(info.life)} / ${tokenLifeFormat.format(info.maxLife)}`;
         token.style.setProperty("--token-life-remaining", `${100 - getTokenDamagePercent(info)}%`);
         const panel = tokenStatusPanels.get(info.id);
         if (panel) {
@@ -1914,6 +2027,153 @@
         cameraY: 0
       };
 
+      // Explorer não modal: seus gestos e medidas são independentes da câmera.
+      function constrainExplorerBounds(bounds, viewport) {
+        const availableWidth = Math.max(1, viewport.width - 24);
+        const availableHeight = Math.max(1, viewport.height - 24);
+        const width = Math.min(availableWidth, Math.max(Math.min(420, availableWidth), bounds.width));
+        const height = Math.min(availableHeight, Math.max(Math.min(300, availableHeight), bounds.height));
+        return { x: Math.max(12, Math.min(viewport.width - 12 - width, bounds.x)),
+          y: Math.max(12, Math.min(viewport.height - 12 - height, bounds.y)), width, height };
+      }
+
+      function resizeExplorerBounds(start, corner, dx, dy, viewport) {
+        const minWidth = Math.min(420, Math.max(1, viewport.width - 24));
+        const minHeight = Math.min(300, Math.max(1, viewport.height - 24));
+        let left = start.x, top = start.y, right = start.x + start.width, bottom = start.y + start.height;
+        if (corner.includes("w")) left = Math.max(12, Math.min(right - minWidth, left + dx));
+        else right = Math.min(viewport.width - 12, Math.max(left + minWidth, right + dx));
+        if (corner.includes("n")) top = Math.max(12, Math.min(bottom - minHeight, top + dy));
+        else bottom = Math.min(viewport.height - 12, Math.max(top + minHeight, bottom + dy));
+        return { x: left, y: top, width: right - left, height: bottom - top };
+      }
+
+      function applyExplorerBounds(bounds) {
+        explorerState.bounds = constrainExplorerBounds(bounds, { width: window.innerWidth, height: window.innerHeight });
+        const b = explorerState.bounds;
+        Object.assign(assetExplorer.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.width}px`, height: `${b.height}px` });
+      }
+
+      function getAssetFileSize(src) {
+        if (!explorerState.fileSizes.has(src)) {
+          // Uma consulta leve por arquivo, compartilhada por todos os tokens.
+          const request = Promise.resolve().then(() => fetch(src, { method: "HEAD" })).then(response => {
+            const bytes = Number(response.headers.get("content-length"));
+            return response.ok && Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+          }).catch(() => null).then(bytes => {
+            if (bytes === null) explorerState.fileSizes.delete(src);
+            return bytes;
+          });
+          explorerState.fileSizes.set(src, request);
+        }
+        return explorerState.fileSizes.get(src);
+      }
+
+      function renderAssetExplorerContent() {
+        explorerContent.replaceChildren();
+        explorerState.lifeFields.clear();
+        const labels = { tokens: "Tokens", maps: "Mapas", scenes: "Cenas", status: "Status" };
+        const heading = document.createElement("h3");
+        heading.className = "asset-explorer__heading";
+        heading.textContent = labels[explorerState.category];
+        explorerContent.append(heading);
+        explorerCategories.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.assetCategory === explorerState.category)));
+        if (explorerState.category !== "tokens" || !tokens.length) {
+          const empty = document.createElement("p");
+          empty.className = "asset-explorer__empty";
+          empty.textContent = "Nenhum arquivo cadastrado nesta categoria.";
+          explorerContent.append(empty);
+          return;
+        }
+        const list = document.createElement("div");
+        list.className = "asset-explorer__list";
+        for (const token of tokens) {
+          const info = getTokenInfo(token);
+          const image = token.querySelector(".token__image");
+          if (!info || !image) continue;
+          const item = document.createElement("article");
+          item.className = "asset-explorer__item";
+          const thumbnail = document.createElement("img");
+          thumbnail.className = "asset-explorer__image";
+          thumbnail.src = image.currentSrc || image.src;
+          thumbnail.alt = `Token ${info.id}`;
+          thumbnail.loading = "lazy";
+          thumbnail.draggable = false;
+          const name = document.createElement("h4");
+          name.className = "asset-explorer__name";
+          name.textContent = info.id;
+          const details = document.createElement("dl");
+          details.className = "asset-explorer__details";
+          const addDetail = (label, value) => {
+            const row = document.createElement("div"), key = document.createElement("dt"), field = document.createElement("dd");
+            key.textContent = label;
+            field.textContent = value;
+            row.append(key, field);
+            details.append(row);
+            return field;
+          };
+          const size = getTokenGridState(token).size;
+          addDetail("Grid", `${size} × ${size}`);
+          explorerState.lifeFields.set(info.id, addDetail("Vida", `${tokenLifeFormat.format(info.life)} / ${tokenLifeFormat.format(info.maxLife)}`));
+          const fileSize = addDetail("Arquivo", "Consultando…");
+          getAssetFileSize(thumbnail.src).then(bytes => {
+            fileSize.textContent = bytes === null ? "Tamanho indisponível" : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(bytes / 1000000)} MB`;
+          });
+          item.append(thumbnail, name, details);
+          list.append(item);
+        }
+        explorerContent.append(list);
+      }
+
+      function openAssetExplorer() {
+        if (!isMasterMode()) return;
+        if (assetExplorer.open) { explorerClose.focus({ preventScroll: true }); return; }
+        const width = Math.min(760, window.innerWidth - 24), height = Math.min(480, window.innerHeight - 24);
+        applyExplorerBounds(explorerState.bounds || { x: (window.innerWidth - width) / 2, y: (window.innerHeight - height) / 2, width, height });
+        renderAssetExplorerContent();
+        assetExplorer.show();
+        explorerClose.focus({ preventScroll: true });
+      }
+
+      function finishExplorerGesture(event) {
+        const gesture = explorerState.gesture;
+        if (!gesture || (event && event.pointerId !== gesture.pointerId)) return;
+        explorerState.gesture = null;
+        try {
+          if (gesture.target.hasPointerCapture(gesture.pointerId)) gesture.target.releasePointerCapture(gesture.pointerId);
+        } catch {}
+      }
+
+      function closeAssetExplorer({ restoreFocus = true } = {}) {
+        const wasOpen = assetExplorer.open;
+        finishExplorerGesture();
+        if (wasOpen) assetExplorer.close();
+        explorerState.lifeFields.clear();
+        if (wasOpen && restoreFocus && isMasterMode()) masterFilesButton.focus({ preventScroll: true });
+      }
+
+      function beginExplorerGesture(event, corner = "") {
+        if (event.button !== 0 || explorerState.gesture || !assetExplorer.open) return;
+        if (!corner && event.target.closest("button")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const target = event.currentTarget;
+        explorerState.gesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: { ...explorerState.bounds }, corner, target };
+        target.setPointerCapture(event.pointerId);
+      }
+
+      function moveExplorerGesture(event) {
+        const gesture = explorerState.gesture;
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        if (event.pointerType === "mouse" && !(event.buttons & 1)) { finishExplorerGesture(event); return; }
+        event.preventDefault();
+        event.stopPropagation();
+        const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+        const next = gesture.corner ? resizeExplorerBounds(gesture.start, gesture.corner, dx, dy, { width: window.innerWidth, height: window.innerHeight }) :
+          { ...gesture.start, x: gesture.start.x + dx, y: gesture.start.y + dy };
+        applyExplorerBounds(next);
+      }
+
       // Modo local de protótipo, sem autenticação. Recursos exclusivos futuros
       // devem consultar isMasterMode() antes de exibir controles ou executar ações.
       function isMasterMode() {
@@ -1926,6 +2186,7 @@
         document.documentElement.dataset.masterMode = String(state.masterMode);
         if (!state.masterMode) {
           state.masterMenuOpen = false;
+          closeAssetExplorer({ restoreFocus: false });
           if (masterMenu.contains(document.activeElement)) masterModeCheckbox.focus({ preventScroll: true });
         }
         syncMasterMenuUI();
@@ -2231,7 +2492,7 @@
         closeAllTokenStatus();
       }, true);
       document.addEventListener("keydown", event => {
-        if (event.key === "Escape" && tokenStatusPanels.size) {
+        if (event.key === "Escape" && tokenStatusPanels.size && !event.target?.closest?.(".asset-explorer")) {
           closeAllTokenStatus();
           event.preventDefault();
           event.stopImmediatePropagation();
@@ -2244,6 +2505,36 @@
       });
       toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
+      masterFilesButton.addEventListener("click", openAssetExplorer);
+      explorerClose.addEventListener("click", () => closeAssetExplorer());
+      explorerCategories.forEach(button => button.addEventListener("click", () => {
+        explorerState.category = button.dataset.assetCategory;
+        renderAssetExplorerContent();
+      }));
+      [explorerHeader, ...explorerCorners].forEach(handle => {
+        handle.addEventListener("pointerdown", event => beginExplorerGesture(event, handle.dataset.explorerCorner || ""));
+        handle.addEventListener("pointermove", moveExplorerGesture);
+        ["pointerup", "pointercancel", "lostpointercapture"].forEach(type => handle.addEventListener(type, finishExplorerGesture));
+      });
+      explorerCorners.forEach(handle => handle.addEventListener("keydown", event => {
+        const directions = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
+        const delta = directions[event.key];
+        if (!delta) return;
+        event.preventDefault();
+        event.stopPropagation();
+        applyExplorerBounds(resizeExplorerBounds(explorerState.bounds, handle.dataset.explorerCorner, ...delta, { width: window.innerWidth, height: window.innerHeight }));
+      }));
+      assetExplorer.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeAssetExplorer();
+      });
+      assetExplorer.addEventListener("cancel", event => { event.preventDefault(); closeAssetExplorer(); });
+      window.addEventListener("resize", () => {
+        finishExplorerGesture();
+        if (assetExplorer.open) applyExplorerBounds(explorerState.bounds);
+      });
       toolButtons.forEach(button => {
         button.addEventListener("click", () => toggleTool(button.dataset.tool));
       });
@@ -4671,6 +4962,7 @@
 
       // Uma única saída para interromper gestos sem confirmar seus destinos.
       function cancelWorkspaceGestures(reason = "cancelado") {
+        finishExplorerGesture();
         finishTokenStatusDrag();
         finishRulerMeasurement();
         finishHighlightStroke();
@@ -5114,6 +5406,7 @@
         if (!tokenActionMenu.hidden && !tokenActionMenu.contains(event.target)) closeTokenActionMenu();
       });
       document.addEventListener("contextmenu", event => {
+        if (event.target.closest?.(".asset-explorer")) return;
         if (performance.now() < suppressContextMenuUntil) {
           event.preventDefault();
           event.stopPropagation();

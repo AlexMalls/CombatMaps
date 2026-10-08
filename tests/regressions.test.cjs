@@ -61,7 +61,7 @@ function gestureContext() {
   },removeEventListener(){},setPointerCapture(id){captured.add(id)},
     hasPointerCapture(id){return captured.has(id)},releasePointerCapture(id){captured.delete(id)}};
   const ctx=vm.createContext({workspaceCard:card, window:{clearTimeout}, document:{hidden:true},
-    performance:{now:()=>1000}, debugLog(){}, listeners, captured,
+    performance:{now:()=>1000}, finishExplorerGesture(){}, debugLog(){}, listeners, captured,
     state:{touchMode:false,isMoving:false},desktopCameraPan:null,desktopBlockCandidate:null,
     suppressContextMenuUntil:0,BLOCK_DRAG_THRESHOLD:14,blockProjectionSession:null,
     hasSelectedToken:()=>true, beginBlockProjection(){ctx.blockProjectionSession={pointerType:'mouse'};return true},

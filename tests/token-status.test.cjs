@@ -8,7 +8,7 @@ function setup(){
     setPointerCapture(id){this.captures.add(id)},hasPointerCapture(id){return this.captures.has(id)},releasePointerCapture(id){this.captures.delete(id)},
     getBoundingClientRect:()=>({left:0,right:200,top:0,bottom:200})});
   const a=makeToken('soldados-01'),b=makeToken('soldados-02');
-  const c=vm.createContext({tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
+  const c=vm.createContext({explorerState:{lifeFields:new Map()},tokenIds:new WeakMap(),tokenData:new Map(),tokenTapCandidates:new Map(),
     TOKEN_TAP_MOVE_TOLERANCE:12,TOKEN_STATUS_HOLD_MS:400,state:{isMoving:false,touchMode:false},
     touchDeselectPointers:new Map(),hasPriorityTool:()=>false,selected:[],tokens:[a,b],
     movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,updateMovementHistoryUI(){},cancelTokenDeath(){},beginTokenDeath(){},
