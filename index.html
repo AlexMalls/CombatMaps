@@ -1228,6 +1228,40 @@
     .asset-explorer__corner[data-explorer-corner="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
     .asset-explorer__corner[data-explorer-corner="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
 
+    /* Editor de cenas: mesmos painéis, cores e controles da biblioteca. */
+    .scene-editor {
+      width: min(62rem, calc(100vw - 1.5rem)); max-width: none;
+      max-height: calc(100dvh - 1.5rem); padding: 0; overflow: auto;
+      background: var(--color-explorer-shell); border-color: var(--color-border-hover);
+    }
+    .scene-editor[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .scene-editor__body { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; min-height: 0; overflow: auto; }
+    .scene-editor .asset-explorer__header { cursor: default; touch-action: auto; }
+    .scene-editor__preview-pane { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 18rem; padding: var(--space-4); background: var(--color-explorer-shadow); }
+    .scene-preview { position: relative; width: 100%; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-background); touch-action: none; }
+    .scene-preview__stage { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; }
+    .scene-preview__image-box { position: absolute; cursor: move; touch-action: none; }
+    .scene-preview__image { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; user-select: none; }
+    .scene-preview__resize { position: absolute; right: 0; bottom: 0; width: calc(24px / var(--scene-preview-scale, 1)); height: calc(24px / var(--scene-preview-scale, 1)); min-height: 0; padding: 0; border-radius: 0; cursor: nwse-resize; touch-action: none; background: var(--color-surface-raised); border: 1px solid var(--color-highlight); }
+    .scene-preview__resize::after { content: "↘"; font-size: calc(16px / var(--scene-preview-scale, 1)); color: var(--color-highlight); }
+    .scene-editor__settings {
+      --color-surface-inset: var(--color-explorer-highlight);
+      --color-control: var(--color-explorer-highlight);
+      --color-control-hover: var(--color-explorer-card);
+      --color-highlight: var(--color-explorer-ink);
+      display: flex; flex-direction: column; gap: var(--space-3);
+      max-height: 65vh; min-height: 0; overflow-y: auto;
+    }
+    .scene-editor__controls { display: flex; flex-direction: column; gap: var(--space-4); }
+    .scene-editor__filename { overflow-wrap: anywhere; font-size: var(--font-size-small); color: var(--color-text-muted); }
+    .scene-editor__footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); }
+    .scene-editor__error { min-height: 1.2em; font-size: var(--font-size-small); color: var(--color-danger-bg); }
+    @media (max-width: 640px) {
+      .scene-editor__body { grid-template-columns: minmax(0, 1fr); }
+      .scene-editor__preview-pane { min-height: 12rem; }
+      .scene-editor__settings { max-height: 34vh; }
+    }
+
     .debug-dialog {
       width: min(52rem, calc(100vw - 2rem));
       max-width: min(52rem, calc(100vw - 2rem));
@@ -1567,6 +1601,37 @@
         <button type="button" class="asset-explorer__corner" data-explorer-corner="se" aria-label="Redimensionar pelo canto inferior direito"></button>
       </dialog>
 
+      <dialog id="scene-editor" class="scene-editor" aria-labelledby="scene-editor-title">
+        <header class="asset-explorer__header">
+          <h2 id="scene-editor-title">Nova cena</h2>
+          <button id="scene-editor-close" class="asset-explorer__close" type="button" aria-label="Fechar nova cena">×</button>
+        </header>
+        <div class="scene-editor__body">
+          <section class="scene-editor__preview-pane" aria-label="Prévia da cena">
+            <div id="scene-preview" class="scene-preview">
+              <div id="scene-preview-stage" class="scene-preview__stage">
+                <div id="scene-image-box" class="scene-preview__image-box" hidden>
+                  <img id="scene-background" class="scene-preview__image" alt="Background da nova cena" draggable="false">
+                  <button id="scene-image-resize" class="scene-preview__resize" type="button" aria-label="Redimensionar background pelo canto inferior direito"></button>
+                </div>
+                <div id="scene-preview-grid" class="workspace-grid" data-visible="true" aria-hidden="true"></div>
+              </div>
+            </div>
+          </section>
+          <aside class="asset-explorer__content scene-editor__settings" aria-label="Configurações da nova cena">
+            <button id="scene-choose-background" type="button">Escolher background</button>
+            <input id="scene-background-picker" type="file" accept="image/*" hidden>
+            <p id="scene-background-name" class="scene-editor__filename">Nenhuma imagem selecionada</p>
+            <div id="scene-grid-controls" class="scene-editor__controls"></div>
+            <p id="scene-editor-error" class="scene-editor__error" role="status" aria-live="polite"></p>
+          </aside>
+        </div>
+        <footer class="scene-editor__footer">
+          <button id="scene-editor-cancel" type="button">Cancelar</button>
+          <button id="scene-editor-confirm" class="ui-button--primary" type="button">Criar cena</button>
+        </footer>
+      </dialog>
+
   <script>
     "use strict";
     (() => {
@@ -1597,6 +1662,23 @@
       const explorerClose = document.getElementById("asset-explorer-close");
       const explorerContent = document.getElementById("asset-explorer-content");
       const tokenImagePicker = document.getElementById("token-image-picker");
+      // Cenas locais desta sessão. Criar não altera nem carrega o mapa atual.
+      const scenes = [];
+      let nextSceneId = 1;
+      const sceneEditor = document.getElementById("scene-editor");
+      const scenePreview = document.getElementById("scene-preview");
+      const scenePreviewStage = document.getElementById("scene-preview-stage");
+      const scenePreviewGrid = document.getElementById("scene-preview-grid");
+      const sceneImageBox = document.getElementById("scene-image-box");
+      const sceneBackground = document.getElementById("scene-background");
+      const sceneResizeHandle = document.getElementById("scene-image-resize");
+      const sceneBackgroundPicker = document.getElementById("scene-background-picker");
+      const sceneBackgroundName = document.getElementById("scene-background-name");
+      const sceneEditorError = document.getElementById("scene-editor-error");
+      const sceneConfirm = document.getElementById("scene-editor-confirm");
+      const sceneGridSettings = { visible: true, absolute: false, distance: 1.5, opacity: 5, size: 48 };
+      const sceneEditorState = { draft: null, scale: 1, gesture: null, loadVersion: 0, pendingUrl: null };
+      const sceneControls = [];
       const explorerCategories = [...assetExplorer.querySelectorAll("[data-asset-category]")];
       const explorerCorners = [...assetExplorer.querySelectorAll("[data-explorer-corner]")];
       const explorerState = { category: "tokens", bounds: null, gesture: null, fileSizes: new Map() };
@@ -2326,18 +2408,22 @@
         heading.className = "asset-explorer__heading";
         heading.textContent = labels[explorerState.category];
         toolbar.append(heading);
-        if (explorerState.category === "tokens") {
+        {
           const add = document.createElement("button");
           add.type = "button";
           add.className = "ui-button--primary asset-explorer__add";
           add.textContent = "+";
-          add.setAttribute("aria-label", "Selecionar imagem de token");
-          add.setAttribute("aria-describedby", "token-image-picker-help");
-          add.addEventListener("click", chooseTokenImage);
+          add.setAttribute("aria-label", explorerState.category === "scenes" ? "Nova cena" : `Adicionar em ${labels[explorerState.category]}`);
+          if (explorerState.category !== "scenes") add.setAttribute("aria-describedby", "token-image-picker-help");
+          add.addEventListener("click", addAssetForCategory);
           toolbar.append(add);
         }
         explorerContent.append(toolbar);
         explorerCategories.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.assetCategory === explorerState.category)));
+        if (explorerState.category === "scenes" && scenes.length) {
+          renderSceneCatalog();
+          return;
+        }
         const types = Object.values(TOKEN_TYPES);
         if (explorerState.category !== "tokens" || !types.length) {
           const empty = document.createElement("p");
@@ -2386,7 +2472,213 @@
       function chooseTokenImage() {
         if (!isMasterMode() || !assetExplorer.open || explorerState.category !== "tokens") return;
         tokenImagePicker.value = "";
+        tokenImagePicker.accept = "image/*";
         tokenImagePicker.click();
+      }
+
+      function addAssetForCategory() {
+        if (!isMasterMode() || !assetExplorer.open) return;
+        if (explorerState.category === "scenes") { openSceneEditor(); return; }
+        if (explorerState.category === "tokens") { chooseTokenImage(); return; }
+        tokenImagePicker.value = "";
+        tokenImagePicker.accept = explorerState.category === "maps" ? "image/*" : "";
+        tokenImagePicker.click();
+      }
+
+      function fitSceneBackground(imageWidth, imageHeight, width, height) {
+        const scale = Math.min(width / imageWidth, height / imageHeight);
+        return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, width: imageWidth * scale, height: imageHeight * scale };
+      }
+
+      function resizeSceneBackground(start, dx, dy, width, height) {
+        return { ...start, width: Math.min(width - start.x, Math.max(16, start.width + dx)), height: Math.min(height - start.y, Math.max(16, start.height + dy)) };
+      }
+
+      function moveSceneBackground(start, dx, dy, width, height) {
+        return { ...start, x: Math.max(0, Math.min(width - start.width, start.x + dx)), y: Math.max(0, Math.min(height - start.height, start.y + dy)) };
+      }
+
+      function initializeSceneControls() {
+        const host = document.getElementById("scene-grid-controls");
+        // Clona a composição dos controles gerais e usa a mesma lógica numérica.
+        const cloneControl = element => {
+          const clone = element.cloneNode(true);
+          [clone, ...clone.querySelectorAll("*")].forEach(node => {
+            if (node.id) node.id = `scene-${node.id}`;
+            ["for", "aria-labelledby", "aria-describedby"].forEach(attribute => {
+              if (node.hasAttribute(attribute)) node.setAttribute(attribute, node.getAttribute(attribute).split(" ").map(id => `scene-${id}`).join(" "));
+            });
+          });
+          host.append(clone);
+        };
+        cloneControl(visibleCheckbox.closest("label"));
+        const definitions = [
+          { rangeId: "grid-distance", valueId: "grid-value", stateKey: "distance", format: value => ({ input: numberFormat.format(value), aria: numberFormat.format(value) }) },
+          { rangeId: "grid-opacity", valueId: "grid-opacity-value", stateKey: "opacity", format: value => ({ input: String(value), aria: `${value}%` }) },
+          { rangeId: "grid-size", valueId: "grid-size-value", stateKey: "size", format: value => ({ input: String(value), aria: `${value} px` }) }
+        ];
+        definitions.forEach(definition => {
+          cloneControl(document.getElementById(definition.rangeId).closest("fieldset"));
+          sceneControls.push({ key: definition.stateKey, control: createNumericControl({ ...definition, rangeId: `scene-${definition.rangeId}`, valueId: `scene-${definition.valueId}`, targetState: sceneGridSettings, apply: renderScenePreview }) });
+        });
+        cloneControl(absoluteCheckbox.closest("label"));
+        ["visible", "absolute"].forEach(key => document.getElementById(`scene-grid-${key}`).addEventListener("change", event => {
+          sceneGridSettings[key] = event.target.checked;
+          renderScenePreview();
+        }));
+      }
+
+      function renderScenePreview() {
+        const draft = sceneEditorState.draft;
+        if (!draft || !sceneEditor.open) return;
+        const width = Math.max(1, scenePreview.clientWidth - 2);
+        const scale = Math.min(width / draft.canvas.width, window.innerHeight * 0.45 / draft.canvas.height);
+        sceneEditorState.scale = scale;
+        scenePreview.style.height = `${draft.canvas.height * scale + 2}px`;
+        Object.assign(scenePreviewStage.style, { width: `${draft.canvas.width}px`, height: `${draft.canvas.height}px`, left: `${(width - draft.canvas.width * scale) / 2}px`, transform: `scale(${scale})` });
+        scenePreviewStage.style.setProperty("--scene-preview-scale", String(scale));
+        scenePreviewGrid.dataset.visible = String(sceneGridSettings.visible);
+        scenePreviewGrid.style.setProperty("--grid-spacing", `${sceneGridSettings.size}px`);
+        scenePreviewGrid.style.setProperty("--grid-opacity", String(sceneGridSettings.opacity / 100));
+        sceneImageBox.hidden = !draft.backgroundUrl;
+        if (draft.imageRect) Object.assign(sceneImageBox.style, { left: `${draft.imageRect.x}px`, top: `${draft.imageRect.y}px`, width: `${draft.imageRect.width}px`, height: `${draft.imageRect.height}px` });
+        sceneBackgroundName.textContent = draft.fileName || "Nenhuma imagem selecionada";
+      }
+
+      function openSceneEditor() {
+        if (!isMasterMode() || sceneEditor.open) return;
+        cancelWorkspaceGestures("nova cena");
+        Object.keys(sceneGridSettings).forEach(key => { sceneGridSettings[key] = state[key]; });
+        sceneEditorState.draft = { canvas: { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) }, backgroundUrl: "", fileName: "", fileSize: 0, imageRect: null, loading: false };
+        sceneEditorError.textContent = "";
+        sceneConfirm.disabled = false;
+        sceneBackground.removeAttribute("src");
+        sceneBackgroundPicker.value = "";
+        sceneEditor.showModal();
+        sceneControls.forEach(({ key, control }) => control.set(sceneGridSettings[key]));
+        ["visible", "absolute"].forEach(key => { document.getElementById(`scene-grid-${key}`).checked = sceneGridSettings[key]; });
+        renderScenePreview();
+      }
+
+      function selectSceneBackground(event) {
+        const file = event.target.files?.[0], draft = sceneEditorState.draft;
+        sceneBackgroundPicker.value = "";
+        if (!file || !draft || !sceneEditor.open || !isMasterMode()) return;
+        if (file.type && !file.type.startsWith("image/")) { sceneEditorError.textContent = "Selecione um arquivo de imagem."; return; }
+        const version = ++sceneEditorState.loadVersion;
+        if (sceneEditorState.pendingUrl) URL.revokeObjectURL(sceneEditorState.pendingUrl);
+        const url = URL.createObjectURL(file), image = new Image();
+        sceneEditorState.pendingUrl = url;
+        draft.loading = true;
+        sceneConfirm.disabled = true;
+        sceneEditorError.textContent = "Carregando imagem…";
+        const current = () => sceneEditorState.draft === draft && sceneEditorState.loadVersion === version && sceneEditor.open;
+        image.onload = () => {
+          if (!current()) { URL.revokeObjectURL(url); return; }
+          if (!image.naturalWidth || !image.naturalHeight) { image.onerror(); return; }
+          if (draft.backgroundUrl) URL.revokeObjectURL(draft.backgroundUrl);
+          draft.backgroundUrl = url;
+          draft.fileName = file.name;
+          draft.fileSize = file.size;
+          draft.imageRect = fitSceneBackground(image.naturalWidth, image.naturalHeight, draft.canvas.width, draft.canvas.height);
+          draft.loading = false;
+          sceneEditorState.pendingUrl = null;
+          sceneBackground.src = url;
+          sceneConfirm.disabled = false;
+          sceneEditorError.textContent = "";
+          renderScenePreview();
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          if (!current()) return;
+          sceneEditorState.pendingUrl = null;
+          draft.loading = false;
+          sceneConfirm.disabled = false;
+          sceneEditorError.textContent = "Não foi possível abrir esta imagem. Escolha outra.";
+        };
+        image.src = url;
+      }
+
+      function finishSceneImageGesture(event) {
+        const gesture = sceneEditorState.gesture;
+        if (!gesture || (event && event.pointerId !== gesture.pointerId)) return;
+        sceneEditorState.gesture = null;
+        try { if (gesture.target.hasPointerCapture(gesture.pointerId)) gesture.target.releasePointerCapture(gesture.pointerId); } catch {}
+      }
+
+      function beginSceneImageGesture(event) {
+        const draft = sceneEditorState.draft;
+        if (!draft?.imageRect || sceneEditorState.gesture || event.button !== 0 || !event.isPrimary) return;
+        event.preventDefault(); event.stopPropagation();
+        sceneEditorState.gesture = { pointerId: event.pointerId, target: sceneImageBox, x: event.clientX, y: event.clientY, start: { ...draft.imageRect }, scale: sceneEditorState.scale, resize: event.target.closest("#scene-image-resize") !== null };
+        sceneImageBox.setPointerCapture(event.pointerId);
+      }
+
+      function moveSceneImageGesture(event) {
+        const gesture = sceneEditorState.gesture, draft = sceneEditorState.draft;
+        if (!gesture || !draft || gesture.pointerId !== event.pointerId) return;
+        if (event.pointerType === "mouse" && !(event.buttons & 1)) { finishSceneImageGesture(event); return; }
+        event.preventDefault();
+        const dx = (event.clientX - gesture.x) / gesture.scale, dy = (event.clientY - gesture.y) / gesture.scale;
+        draft.imageRect = (gesture.resize ? resizeSceneBackground : moveSceneBackground)(gesture.start, dx, dy, draft.canvas.width, draft.canvas.height);
+        renderScenePreview();
+      }
+
+      function closeSceneEditor({ restoreFocus = true } = {}) {
+        const wasOpen = sceneEditor.open;
+        finishSceneImageGesture();
+        sceneEditorState.loadVersion++;
+        if (sceneEditorState.pendingUrl) URL.revokeObjectURL(sceneEditorState.pendingUrl);
+        if (sceneEditorState.draft?.backgroundUrl) URL.revokeObjectURL(sceneEditorState.draft.backgroundUrl);
+        sceneEditorState.pendingUrl = null;
+        sceneEditorState.draft = null;
+        sceneBackground.removeAttribute("src");
+        sceneBackgroundPicker.value = "";
+        if (wasOpen) sceneEditor.close();
+        if (wasOpen && restoreFocus && assetExplorer.open) explorerCategories.find(button => button.dataset.assetCategory === "scenes")?.focus({ preventScroll: true });
+      }
+
+      function confirmScene() {
+        const draft = sceneEditorState.draft;
+        if (!draft || draft.loading || !sceneEditor.open || !isMasterMode()) return;
+        sceneControls.forEach(({ control }) => control.commit());
+        const id = nextSceneId++;
+        scenes.push({ id: `scene-${id}`, name: draft.fileName.replace(/\.[^.]+$/, "") || `Cena ${id}`, canvas: { ...draft.canvas }, grid: { ...sceneGridSettings }, backgroundUrl: draft.backgroundUrl, fileName: draft.fileName, fileSize: draft.fileSize, imageRect: draft.imageRect ? { ...draft.imageRect } : null });
+        // Transfere a imagem para a cena; fechar o rascunho não deve descartá-la.
+        draft.backgroundUrl = "";
+        closeSceneEditor();
+        explorerState.category = "scenes";
+        renderAssetExplorerContent();
+      }
+
+      function createSceneThumbnail(scene) {
+        const ns = "http://www.w3.org/2000/svg";
+        const create = (tag, attributes) => {
+          const node = document.createElementNS(ns, tag);
+          Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
+          return node;
+        };
+        const svg = create("svg", { viewBox: `0 0 ${scene.canvas.width} ${scene.canvas.height}`, role: "img", "aria-label": `Prévia de ${scene.name}`, class: "asset-explorer__image" });
+        svg.append(create("rect", { width: "100%", height: "100%", fill: "var(--color-background)" }));
+        if (scene.backgroundUrl && scene.imageRect) svg.append(create("image", { href: scene.backgroundUrl, ...scene.imageRect, preserveAspectRatio: "none" }));
+        if (scene.grid.visible) {
+          const pattern = create("pattern", { id: `preview-${scene.id}`, width: scene.grid.size, height: scene.grid.size, patternUnits: "userSpaceOnUse", x: (scene.canvas.width - scene.grid.size) / 2, y: (scene.canvas.height - scene.grid.size) / 2 });
+          pattern.append(create("path", { d: `M ${scene.grid.size} 0 H 0 V ${scene.grid.size}`, fill: "none", stroke: "white", "stroke-width": 1 }));
+          const defs = create("defs", {}); defs.append(pattern); svg.append(defs, create("rect", { width: "100%", height: "100%", fill: `url(#preview-${scene.id})`, opacity: scene.grid.opacity / 100 }));
+        }
+        return svg;
+      }
+
+      function renderSceneCatalog() {
+        const list = document.createElement("div"); list.className = "asset-explorer__list";
+        scenes.forEach(scene => {
+          const item = document.createElement("article"); item.className = "asset-explorer__item";
+          const name = document.createElement("h4"); name.className = "asset-explorer__name"; name.textContent = scene.name;
+          const details = document.createElement("p"); details.className = "asset-explorer__details";
+          details.textContent = `${scene.fileName || "Sem background"} · Grid: ${scene.grid.size} px · Distância: ${numberFormat.format(scene.grid.distance)} · Opacidade: ${scene.grid.opacity}%`;
+          item.append(createSceneThumbnail(scene), name, details); list.append(item);
+        });
+        explorerContent.append(list);
       }
 
       function discardTokenImageSelection() {
@@ -2457,6 +2749,7 @@
         if (!state.masterMode) {
           state.masterMenuOpen = false;
           setTokenDockOpen(false, { restoreFocus: false });
+          closeSceneEditor({ restoreFocus: false });
           closeAssetExplorer({ restoreFocus: false });
           if (masterMenu.contains(document.activeElement)) masterModeCheckbox.focus({ preventScroll: true });
         }
@@ -2769,7 +3062,7 @@
         closeAllTokenStatus();
       }, true);
       document.addEventListener("keydown", event => {
-        if (event.key === "Escape" && tokenStatusPanels.size && !event.target?.closest?.(".asset-explorer")) {
+        if (event.key === "Escape" && tokenStatusPanels.size && !event.target?.closest?.(".asset-explorer, .scene-editor")) {
           closeAllTokenStatus();
           event.preventDefault();
           event.stopImmediatePropagation();
@@ -2787,6 +3080,24 @@
       renderTokenDock();
       tokenImagePicker.addEventListener("change", discardTokenImageSelection);
       tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
+      document.getElementById("scene-choose-background").addEventListener("click", () => { sceneBackgroundPicker.value = ""; sceneBackgroundPicker.click(); });
+      sceneBackgroundPicker.addEventListener("change", selectSceneBackground);
+      ["scene-editor-close", "scene-editor-cancel"].forEach(id => document.getElementById(id).addEventListener("click", () => closeSceneEditor()));
+      sceneConfirm.addEventListener("click", confirmScene);
+      sceneEditor.addEventListener("cancel", event => { event.preventDefault(); closeSceneEditor(); });
+      sceneEditor.addEventListener("keydown", event => event.stopPropagation());
+      sceneImageBox.addEventListener("pointerdown", beginSceneImageGesture);
+      sceneImageBox.addEventListener("pointermove", moveSceneImageGesture);
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach(type => sceneImageBox.addEventListener(type, finishSceneImageGesture));
+      sceneResizeHandle.addEventListener("keydown", event => {
+        const draft = sceneEditorState.draft;
+        const deltas = { ArrowRight: [10, 0], ArrowLeft: [-10, 0], ArrowDown: [0, 10], ArrowUp: [0, -10] };
+        if (!draft?.imageRect || !deltas[event.key]) return;
+        event.preventDefault();
+        draft.imageRect = resizeSceneBackground(draft.imageRect, ...deltas[event.key], draft.canvas.width, draft.canvas.height);
+        renderScenePreview();
+      });
+      window.addEventListener("resize", () => { finishSceneImageGesture(); renderScenePreview(); });
       explorerClose.addEventListener("click", () => closeAssetExplorer());
       explorerCategories.forEach(button => button.addEventListener("click", () => {
         explorerState.category = button.dataset.assetCategory;
@@ -2966,7 +3277,7 @@
         return Number.isFinite(number) ? number : null;
       }
 
-      function createNumericControl({ rangeId, valueId, stateKey, format, apply, constrain = value => value }) {
+      function createNumericControl({ rangeId, valueId, stateKey, format, apply, constrain = value => value, targetState = state }) {
         const range = document.getElementById(rangeId);
         const input = document.getElementById(valueId);
         const min = Number(range.min);
@@ -2984,7 +3295,7 @@
           const normalized = normalize(raw);
           if (normalized === null) return false;
           const next = constrain(normalized);
-          state[stateKey] = next;
+          targetState[stateKey] = next;
           const display = format(next);
           range.value = String(next);
           range.style.setProperty("--range-progress", `${(next - min) / (max - min) * 100}%`);
@@ -2997,7 +3308,7 @@
         }
 
         function commit() {
-          if (!set(input.value)) set(state[stateKey]);
+          if (!set(input.value)) set(targetState[stateKey]);
         }
 
         range.addEventListener("input", () => set(range.value));
@@ -3013,11 +3324,11 @@
             event.preventDefault();
             if (event.key === "Home") set(min);
             else if (event.key === "End") set(max);
-            else set(state[stateKey] + (event.key === "ArrowUp" ? step : -step));
+            else set(targetState[stateKey] + (event.key === "ArrowUp" ? step : -step));
           }
         });
 
-        set(state[stateKey]);
+        set(targetState[stateKey]);
         return { set, commit, min, max, step };
       }
 
@@ -5270,6 +5581,7 @@
 
       // Uma única saída para interromper gestos sem confirmar seus destinos.
       function cancelWorkspaceGestures(reason = "cancelado") {
+        finishSceneImageGesture();
         cancelTokenDockDrag();
         finishExplorerGesture();
         finishTokenStatusDrag();
@@ -5715,7 +6027,7 @@
         if (!tokenActionMenu.hidden && !tokenActionMenu.contains(event.target)) closeTokenActionMenu();
       });
       document.addEventListener("contextmenu", event => {
-        if (event.target.closest?.(".asset-explorer, .token-dock")) return;
+        if (event.target.closest?.(".asset-explorer, .scene-editor, .token-dock")) return;
         if (performance.now() < suppressContextMenuUntil) {
           event.preventDefault();
           event.stopPropagation();
@@ -5808,6 +6120,7 @@
       setDebugEnabled(true);
       setTouchMode(state.touchMode);
       setMasterMode(state.masterMode);
+      initializeSceneControls();
       debugLog("system", "CombatMaps inicializado", { touchCapable, userAgent: navigator.userAgent });
       setVisible(state.visible);
       setAbsolute(state.absolute);

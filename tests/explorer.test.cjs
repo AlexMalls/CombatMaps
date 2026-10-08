@@ -6,7 +6,7 @@ const path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const start=script.indexOf(`      function ${name}(`);assert.ok(start>=0,`${name} is implemented`);return script.slice(start,script.indexOf('\n      }',start)+8);}
-function setup(extra={}){const c=vm.createContext({Math,Number,Map,Promise,Intl,explorerState:{fileSizes:new Map()},...extra});for(const name of ['constrainExplorerBounds','resizeExplorerBounds','getAssetFileSize'])vm.runInContext(source(name),c);return c;}
+function setup(extra={}){const c=vm.createContext({Math,Number,Map,Promise,Intl,scenes:[],explorerState:{fileSizes:new Map()},...extra});for(const name of ['constrainExplorerBounds','resizeExplorerBounds','getAssetFileSize'])vm.runInContext(source(name),c);return c;}
 function call(c,name,...args){c.args=args;return JSON.parse(JSON.stringify(vm.runInContext(`${name}(...args)`,c)));}
 test('window fits narrow mobile and stays inside viewport after rotation',()=>{
  const c=setup();const b=call(c,'constrainExplorerBounds',{x:700,y:500,width:760,height:480},{width:360,height:640});
@@ -74,7 +74,7 @@ test('catalog lists loaded types once even with many map tokens, using template 
  const content=node(),buttons=['tokens','maps','scenes','status'].map(id=>({...node(),dataset:{assetCategory:id}}));
  const types={soldiers:{id:'soldiers',name:'Soldados',image:'token.png',gridSize:1,maxLife:10000},giant:{id:'giant',name:'Gigante',image:'giant.gif',gridSize:3,maxLife:20000}};
  const c=setup({document:{createElement:node},explorerContent:content,explorerCategories:buttons,explorerState:{category:'tokens',fileSizes:new Map()},TOKEN_TYPES:types,tokens:Array(7).fill({life:0}),tokenLifeFormat:new Intl.NumberFormat('pt-BR'),fetch:async()=>({ok:true,headers:{get:()=> '2500000'}})});
- vm.runInContext(source('chooseTokenImage')+source('renderAssetExplorerContent'),c);c.renderAssetExplorerContent();
+ vm.runInContext(source('addAssetForCategory')+source('renderAssetExplorerContent'),c);c.renderAssetExplorerContent();
  const list=content.children[1];assert.equal(list.children.length,2);
  const item=list.children[0];assert.equal(item.children[0].src,'token.png');assert.equal(item.children[1].textContent,'Soldados');
  const rows=item.children[2].children;assert.equal(rows[0].children[1].textContent,'1 × 1');assert.equal(rows[1].children[1].textContent,'10.000');
