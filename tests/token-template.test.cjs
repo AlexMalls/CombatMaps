@@ -6,7 +6,7 @@ function setup(){
  class Image{constructor(){images.push(this);this.naturalWidth=100;this.naturalHeight=200}}
  const c=vm.createContext({Math,Object,Promise,Image,URL:{createObjectURL:f=>`blob:${++seq}:${f.name}`,revokeObjectURL:url=>revoked.push(url)},
   isMasterMode:()=>true,assetExplorer:{open:true},tokenTemplateEditor:{open:false,showModal(){this.open=true},close(){this.open=false}},
-  tokenTemplateName:{value:''},tokenTemplatePicker:{value:''},tokenTemplatePreview:{removeAttribute(){delete this.src}},tokenTemplateEmpty:{},tokenTemplateFile:{},tokenTemplateError:{},tokenTemplateConfirm:{},
+  tokenTemplateLife:{value:'10000'},tokenTemplateStatus:{value:'Normal'},tokenTemplateEditImage:{},tokenTemplateTitle:{},tokenTemplateName:{value:''},tokenTemplatePicker:{value:''},tokenTemplatePreview:{removeAttribute(){delete this.src}},tokenTemplateEmpty:{},tokenTemplateFile:{},tokenTemplateError:{},tokenTemplateConfirm:{},
   tokenTemplateState:{draft:null,pendingUrl:null,loadVersion:0},tokenTemplateSettings:{size:1},tokenTemplateSizeControl:{set(v){c.tokenTemplateSettings.size=v},commit(){c.tokenTemplateSettings.size=Math.max(1,Math.min(10,Math.round(c.tokenTemplateSettings.size))) }},
   cancelWorkspaceGestures(){},explorerContent:{querySelector:()=>null},explorerState:{category:'tokens',fileSizes:new Map()},TOKEN_TYPES:{},nextTokenTypeId:1,
   renderAssetExplorerContent(){c.catalogRendered=true},renderTokenDock(){c.dockRendered=true},tokenDockStatus:{}});
@@ -37,4 +37,17 @@ test('image replacement releases discarded files but keeps the committed URL ali
 test('token editor shares controls and aesthetics; size slider uses integer steps1..10',()=>{
  assert.match(html,/id="token-template-editor" class="scene-editor/);assert.match(html,/id="token-template-size"[^>]*min="1"[^>]*max="10"[^>]*step="1"[^>]*value="1"/);
  assert.match(source('initializeTokenTemplateControls'),/createNumericControl/);assert.match(source('addAssetForCategory'),/openTokenTemplateEditor/);
+});
+test('editing preserves type ID and instance prefix, updates all defaults without changing existing units',()=>{
+ const c=setup();const old={id:'soldiers',instancePrefix:'soldados',name:'Soldados',maxLife:10000,status:'Normal',image:'soldiers.png',gridSize:1};c.TOKEN_TYPES.soldiers=old;
+ const instance={life:4000,maxLife:10000,image:old.image};c.openTokenTemplateEditor('soldiers');assert.equal(c.tokenTemplateLife.value,'10000');assert.equal(c.tokenTemplateConfirm.disabled,false);assert.equal(c.tokenTemplateState.draft.ownsImage,false);
+ c.tokenTemplateName.value='Guardas';c.tokenTemplateLife.value='25000';c.tokenTemplateStatus.value='Alerta';c.tokenTemplateSettings.size=2;c.confirmTokenTemplate();
+ const type=c.TOKEN_TYPES.soldiers;assert.equal(type.id,'soldiers');assert.equal(type.instancePrefix,'soldados');assert.equal(type.maxLife,25000);assert.equal(type.status,'Alerta');assert.equal(type.gridSize,2);assert.equal(c.nextTokenTypeId,1);assert.ok(!c.revoked.includes(old.image));assert.deepEqual(instance,{life:4000,maxLife:10000,image:'soldiers.png'});
+});
+test('cancel or image replacement while editing never revokes the previously saved image',()=>{
+ const c=setup();c.TOKEN_TYPES.soldiers={id:'soldiers',image:'blob:saved',name:'Soldados',maxLife:10000,gridSize:1};c.openTokenTemplateEditor('soldiers');c.closeTokenTemplateEditor();assert.ok(!c.revoked.includes('blob:saved'));
+ c.openTokenTemplateEditor('soldiers');c.select('new.png');c.images[0].onload();assert.ok(!c.revoked.includes('blob:saved'));const fresh=c.tokenTemplateState.draft.image;c.closeTokenTemplateEditor();assert.ok(c.revoked.includes(fresh));assert.equal(c.TOKEN_TYPES.soldiers.image,'blob:saved');
+});
+test('invalid initial health does not mutate the type or close the editor',()=>{
+ for(const value of ['0','-1','1.5','NaN','1000000001']){const c=setup();c.openTokenTemplateEditor();c.select('token.png');c.images[0].onload();c.tokenTemplateLife.value=value;assert.equal(c.confirmTokenTemplate(),false);assert.equal(Object.keys(c.TOKEN_TYPES).length,0);assert.equal(c.tokenTemplateEditor.open,true);}
 });

@@ -1240,6 +1240,18 @@
       max-height: calc(100dvh - 1.5rem); padding: 0; overflow: auto;
       background: var(--color-explorer-shell); border-color: var(--color-border-hover);
     }
+    .asset-explorer__editable { text-align: left; cursor: pointer; display: block; width: 100%; }
+    .asset-explorer__editable:focus-visible { outline: 2px solid var(--color-accent); }
+    .scene-editor.image-editor[open] { width: min(1100px, calc(100vw - 24px)); height: min(850px, calc(100dvh - 24px)); grid-template-rows: auto auto minmax(100px, 1fr) auto auto auto; }
+    .image-editor__tools { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
+    .image-editor__tools label { display: flex; align-items: center; gap: var(--space-2); }
+    .image-editor__tools [aria-pressed="true"] { background: var(--color-accent); color: var(--color-text-inverse); }
+    .image-editor__viewport { overflow: auto; min-height: 0; padding: 16px; background: var(--color-surface-inset); overscroll-behavior: contain; }
+    .image-editor__stage { position: relative; margin: auto; background: repeating-conic-gradient(var(--color-surface-raised) 0 25%, var(--color-surface-inset) 0 50%) 0 / 20px 20px; }
+    .image-editor__stage canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+    .image-editor__stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .image-editor__stage polygon { stroke: var(--color-accent); fill: var(--color-highlight-soft); stroke-dasharray: 5 3; }
+    .image-editor__help { margin: 0; padding: 0 var(--space-3) var(--space-2); }
     .token-template__preview { display: block; width: 100%; max-height: 45vh; object-fit: contain; }
     .scene-editor[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
     .scene-editor__body { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; min-height: 0; overflow: auto; }
@@ -1615,6 +1627,25 @@
         <button type="button" class="asset-explorer__corner" data-explorer-corner="se" aria-label="Redimensionar pelo canto inferior direito"></button>
       </dialog>
 
+      <dialog id="token-image-editor" class="scene-editor image-editor" aria-labelledby="image-editor-title">
+        <header class="asset-explorer__header"><h2 id="image-editor-title">Editar imagem</h2><button class="asset-explorer__close" data-image-action="close" type="button" aria-label="Fechar editor de imagem">×</button></header>
+        <div class="image-editor__tools" role="toolbar" aria-label="Ferramentas de imagem">
+          <button type="button" data-image-action="lasso" aria-pressed="true">Laço</button>
+          <button type="button" data-image-action="rectangle" aria-pressed="false">Retângulo</button>
+          <button type="button" data-image-action="pan" aria-pressed="false">Mover imagem</button>
+          <button type="button" data-image-action="left" aria-label="Girar 90 graus à esquerda">↶ 90°</button>
+          <button type="button" data-image-action="right" aria-label="Girar 90 graus à direita">↷ 90°</button>
+          <button type="button" data-image-action="crop">Recortar seleção</button>
+          <button type="button" data-image-action="delete">Apagar seleção</button>
+          <button type="button" data-image-action="undo">Desfazer</button>
+          <label>Zoom <input type="range" min="10" max="400" value="100" step="5" aria-label="Zoom da imagem"></label>
+        </div>
+        <div class="image-editor__viewport"><div class="image-editor__stage"><canvas id="image-editor-canvas" aria-label="Imagem: arraste para selecionar"></canvas><svg aria-hidden="true"><polygon/></svg></div></div>
+        <p class="scene-editor__filename image-editor__help">Laço: contorne a área que deseja manter e recorte. Retângulo: selecione uma área para recortar ou apagar. Edições são aplicadas como PNG estático.</p>
+        <p class="scene-editor__error image-editor__help" role="status" aria-live="polite"></p>
+        <footer class="scene-editor__footer"><button type="button" data-image-action="cancel">Cancelar</button><button type="button" class="ui-button--primary" data-image-action="apply">Aplicar imagem</button></footer>
+      </dialog>
+
       <dialog id="token-template-editor" class="scene-editor token-template-editor" aria-labelledby="token-template-title">
         <header class="asset-explorer__header">
           <h2 id="token-template-title">Novo token</h2>
@@ -1629,8 +1660,13 @@
             <label for="token-template-name">Nome do token</label>
             <input id="token-template-name" type="text" maxlength="80" placeholder="Nome do token" autocomplete="off">
             <button id="token-template-choose" type="button">Escolher imagem (obrigatória)</button>
+            <button id="token-template-edit-image" type="button" disabled>Editar imagem</button>
             <input id="token-template-picker" type="file" accept="image/*" hidden>
             <p id="token-template-file" class="scene-editor__filename">Nenhuma imagem selecionada</p>
+            <label for="token-template-life">Vida inicial</label>
+            <input id="token-template-life" type="number" min="1" max="1000000000" step="1" value="10000" required>
+            <label for="token-template-status">Status inicial</label>
+            <input id="token-template-status" type="text" maxlength="80" value="Normal">
             <label for="token-template-size">Tamanho padrão</label>
             <div class="grid-settings__slider-row">
               <input id="token-template-size" type="range" min="1" max="10" step="1" value="1" aria-label="Tamanho padrão do token">
@@ -1680,6 +1716,7 @@
         </footer>
       </dialog>
 
+  <script src="token-image-editor.js"></script>
   <script>
     "use strict";
     (() => {
@@ -1724,6 +1761,10 @@
       const tokenTemplateEmpty = document.getElementById("token-template-empty");
       const tokenTemplateFile = document.getElementById("token-template-file");
       const tokenTemplateError = document.getElementById("token-template-error");
+      const tokenTemplateLife = document.getElementById("token-template-life");
+      const tokenTemplateStatus = document.getElementById("token-template-status");
+      const tokenTemplateEditImage = document.getElementById("token-template-edit-image");
+      const tokenTemplateTitle = document.getElementById("token-template-title");
       const tokenTemplateConfirm = document.getElementById("token-template-confirm");
       const tokenTemplateSettings = { size: 1 };
       const tokenTemplateState = { draft: null, loadVersion: 0, pendingUrl: null };
@@ -2515,8 +2556,11 @@
         const list = document.createElement("div");
         list.className = "asset-explorer__list";
         for (const type of types) {
-          const item = document.createElement("article");
-          item.className = "asset-explorer__item";
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "asset-explorer__item asset-explorer__editable";
+          item.setAttribute("aria-label", `Editar tipo de token ${type.name}`);
+          item.addEventListener("click", () => openTokenTemplateEditor(type.id));
           const thumbnail = document.createElement("img");
           thumbnail.className = "asset-explorer__image";
           thumbnail.src = type.image;
@@ -2539,6 +2583,7 @@
           const size = type.gridSize;
           addDetail("Grid", `${size} × ${size}`);
           addDetail("Vida inicial", tokenLifeFormat.format(type.maxLife));
+          addDetail("Status", type.status || "Normal");
           const fileSize = addDetail("Arquivo", "Consultando…");
           getAssetFileSize(thumbnail.src).then(bytes => {
             fileSize.textContent = bytes === null ? "Tamanho indisponível" : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(bytes / 1000000)} MB`;
@@ -2557,19 +2602,27 @@
         });
       }
 
-      function openTokenTemplateEditor() {
+      function openTokenTemplateEditor(typeId = null) {
         if (!isMasterMode() || !assetExplorer.open || tokenTemplateEditor.open) return;
         cancelWorkspaceGestures("novo tipo de token");
-        tokenTemplateState.draft = { image: "", fileName: "", fileSize: 0, loading: false };
-        tokenTemplateName.value = "";
+        const type = typeId ? TOKEN_TYPES[typeId] : null;
+        if (typeId && !type) return;
+        tokenTemplateState.draft = { typeId, image: type?.image || "", ownsImage: false, fileName: type?.fileName || type?.image.split("/").pop() || "", fileSize: type?.fileSize || 0, loading: false };
+        tokenTemplateTitle.textContent = type ? "Editar token" : "Novo token";
+        tokenTemplateConfirm.textContent = type ? "Salvar alterações" : "Criar token";
+        tokenTemplateName.value = type?.name || "";
+        tokenTemplateLife.value = String(type?.maxLife || 10000);
+        tokenTemplateStatus.value = type?.status || "Normal";
         tokenTemplatePicker.value = "";
         tokenTemplatePreview.removeAttribute("src");
-        tokenTemplatePreview.hidden = true;
-        tokenTemplateEmpty.hidden = false;
-        tokenTemplateFile.textContent = "Nenhuma imagem selecionada";
+        if (type) tokenTemplatePreview.src = type.image;
+        tokenTemplatePreview.hidden = !type;
+        tokenTemplateEmpty.hidden = Boolean(type);
+        tokenTemplateFile.textContent = tokenTemplateState.draft.fileName || "Nenhuma imagem selecionada";
         tokenTemplateError.textContent = "";
-        tokenTemplateConfirm.disabled = true;
-        tokenTemplateSizeControl.set(1);
+        tokenTemplateConfirm.disabled = !type;
+        tokenTemplateEditImage.disabled = !type;
+        tokenTemplateSizeControl.set(type?.gridSize || 1);
         tokenTemplateEditor.showModal();
       }
 
@@ -2583,14 +2636,15 @@
         const url = URL.createObjectURL(file), image = new Image();
         tokenTemplateState.pendingUrl = url;
         draft.loading = true;
+        tokenTemplateEditImage.disabled = true;
         tokenTemplateConfirm.disabled = true;
         tokenTemplateError.textContent = "Carregando imagem…";
         const current = () => tokenTemplateState.draft === draft && tokenTemplateState.loadVersion === version && tokenTemplateEditor.open;
         image.onload = () => {
           if (!current()) { URL.revokeObjectURL(url); return; }
           if (!image.naturalWidth || !image.naturalHeight) { image.onerror(); return; }
-          if (draft.image) URL.revokeObjectURL(draft.image);
-          Object.assign(draft, { image: url, fileName: file.name, fileSize: file.size, loading: false });
+          if (draft.image && draft.ownsImage) URL.revokeObjectURL(draft.image);
+          Object.assign(draft, { image: url, fileName: file.name, fileSize: file.size, ownsImage: true, loading: false });
           tokenTemplateState.pendingUrl = null;
           tokenTemplatePreview.src = url;
           tokenTemplatePreview.hidden = false;
@@ -2598,6 +2652,7 @@
           tokenTemplateFile.textContent = file.name;
           tokenTemplateError.textContent = "";
           tokenTemplateConfirm.disabled = false;
+          tokenTemplateEditImage.disabled = false;
         };
         image.onerror = () => {
           URL.revokeObjectURL(url);
@@ -2605,6 +2660,7 @@
           tokenTemplateState.pendingUrl = null;
           draft.loading = false;
           tokenTemplateConfirm.disabled = !draft.image;
+          tokenTemplateEditImage.disabled = !draft.image;
           tokenTemplateError.textContent = "Não foi possível abrir esta imagem. Escolha outra.";
         };
         image.src = url;
@@ -2612,9 +2668,10 @@
 
       function closeTokenTemplateEditor({ restoreFocus = true } = {}) {
         const wasOpen = tokenTemplateEditor.open;
+        if (typeof window !== "undefined") window.TokenImageEditor?.close();
         tokenTemplateState.loadVersion++;
         if (tokenTemplateState.pendingUrl) URL.revokeObjectURL(tokenTemplateState.pendingUrl);
-        if (tokenTemplateState.draft?.image) URL.revokeObjectURL(tokenTemplateState.draft.image);
+        if (tokenTemplateState.draft?.image && tokenTemplateState.draft.ownsImage) URL.revokeObjectURL(tokenTemplateState.draft.image);
         tokenTemplateState.pendingUrl = null;
         tokenTemplateState.draft = null;
         tokenTemplatePreview.removeAttribute("src");
@@ -2627,17 +2684,38 @@
         const draft = tokenTemplateState.draft;
         if (!draft?.image || draft.loading || !tokenTemplateEditor.open || !isMasterMode()) return false;
         tokenTemplateSizeControl.commit();
-        const id = `custom-${nextTokenTypeId++}`;
+        const maxLife = Number(tokenTemplateLife.value);
+        if (!Number.isSafeInteger(maxLife) || maxLife < 1 || maxLife > 1000000000) {
+          tokenTemplateError.textContent = "A vida inicial deve ser um inteiro entre 1 e 1.000.000.000.";
+          return false;
+        }
+        const id = draft.typeId || `custom-${nextTokenTypeId++}`;
+        const previous = TOKEN_TYPES[id];
         const name = tokenTemplateName.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || "Token";
-        TOKEN_TYPES[id] = Object.freeze({ id, instancePrefix: id, name, image: draft.image, fileSize: draft.fileSize, gridSize: tokenTemplateSettings.size, maxLife: 10000, status: "Normal" });
-        explorerState.fileSizes.set(draft.image, Promise.resolve(draft.fileSize));
+        TOKEN_TYPES[id] = Object.freeze({ id, instancePrefix: previous?.instancePrefix || id, name, image: draft.image, fileName: draft.fileName, fileSize: draft.fileSize, gridSize: tokenTemplateSettings.size, maxLife, status: tokenTemplateStatus.value.trim() || "Normal" });
+        if (draft.ownsImage) explorerState.fileSizes.set(draft.image, Promise.resolve(draft.fileSize));
         draft.image = ""; // A URL pertence agora ao catálogo e às instâncias do token.
         closeTokenTemplateEditor();
         explorerState.category = "tokens";
         renderAssetExplorerContent();
         renderTokenDock();
-        tokenDockStatus.textContent = `Tipo de token ${name} criado.`;
+        tokenDockStatus.textContent = `Tipo de token ${name} ${previous ? "atualizado" : "criado"}.`;
         return true;
+      }
+
+      function openTokenImageEditor() {
+        const draft = tokenTemplateState.draft;
+        if (!draft?.image || draft.loading || !isMasterMode()) return;
+        window.TokenImageEditor.open(draft.image, blob => {
+          if (tokenTemplateState.draft !== draft || !tokenTemplateEditor.open || !isMasterMode()) return;
+          if (draft.ownsImage) URL.revokeObjectURL(draft.image);
+          draft.image = URL.createObjectURL(blob);
+          draft.ownsImage = true;
+          draft.fileSize = blob.size;
+          draft.fileName = `${draft.fileName.replace(/\.[^.]+$/, "") || "token"}-editado.png`;
+          tokenTemplatePreview.src = draft.image;
+          tokenTemplateFile.textContent = draft.fileName;
+        });
       }
 
       function chooseTokenImage() {
@@ -3397,6 +3475,7 @@
       renderTokenDock();
       document.getElementById("token-template-choose").addEventListener("click", () => { tokenTemplatePicker.value = ""; tokenTemplatePicker.click(); });
       tokenTemplatePicker.addEventListener("change", selectTokenTemplateImage);
+      tokenTemplateEditImage.addEventListener("click", openTokenImageEditor);
       ["token-template-close", "token-template-cancel"].forEach(id => document.getElementById(id).addEventListener("click", () => closeTokenTemplateEditor()));
       tokenTemplateConfirm.addEventListener("click", confirmTokenTemplate);
       tokenTemplateEditor.addEventListener("cancel", event => { event.preventDefault(); closeTokenTemplateEditor(); });

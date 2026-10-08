@@ -79,7 +79,7 @@ test('catalog lists loaded types once even with many map tokens, using template 
  const item=list.children[0];assert.equal(item.children[0].src,'token.png');assert.equal(item.children[1].textContent,'Soldados');
  const rows=item.children[2].children;assert.equal(rows[0].children[1].textContent,'1 × 1');assert.equal(rows[1].children[1].textContent,'10.000');
  assert.equal(list.children[1].children[2].children[0].children[1].textContent,'3 × 3');
- await new Promise(resolve=>setImmediate(resolve));assert.equal(rows[2].children[1].textContent,'2,5 MB');
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(rows[3].children[1].textContent,'2,5 MB');
  c.tokens=[];c.renderAssetExplorerContent();assert.equal(content.children[1].children.length,2);
  for(const category of ['maps','scenes','status']){c.explorerState.category=category;c.renderAssetExplorerContent();assert.equal(content.children.length,2);assert.match(content.children[1].textContent,/Nenhum arquivo/);}
 });
