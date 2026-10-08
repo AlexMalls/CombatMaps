@@ -27,6 +27,9 @@
   const geometry = { selectionBounds, rectanglePoints, polygonArea, canvasPoint, loupePosition };
   if (typeof module !== "undefined" && module.exports) module.exports = geometry;
   if (!root.document) return;
+  const ACTIVE_TOOLS = new Set(["pan", "rectangle", "ellipse", "lasso", "wand"]);
+  const touches = new Map();
+  let pinch = null, pinchBlocked = false, pendingTouchAction = null, filterDraft = null, changingCapture = false;
   const TOOLS = ["pan", "rectangle", "ellipse", "lasso", "wand", "brush", "eraser", "bucket", "eyedropper"];
   const pixelTools = root.TokenImageTools;
   let loupePointer = null;
@@ -40,10 +43,10 @@
     ui.loupe = dialog.querySelector("#image-editor-loupe");
     canvas = document.getElementById("image-editor-canvas"); context = canvas.getContext("2d"); maskCanvas = newCanvas(1, 1);
     dialog.querySelectorAll("[data-image-action]").forEach(button => button.addEventListener("click", () => action(button.dataset.imageAction)));
-    ui.zoom.addEventListener("input", () => { cancelGesture(); zoom = Number(ui.zoom.value) / 100; render(); });
+    ui.zoom?.addEventListener("input", () => { cancelGesture(); zoom = Number(ui.zoom.value) / 100; render(); });
     dialog.querySelectorAll("[data-image-setting]").forEach(input => { if (input.dataset.imageSetting !== "zoom") input.addEventListener("input", render); });
     canvas.addEventListener("pointerdown", begin); canvas.addEventListener("pointermove", move); canvas.addEventListener("pointerup", end);
-    canvas.addEventListener("pointercancel", cancelGesture); canvas.addEventListener("lostpointercapture", cancelGesture); canvas.addEventListener("contextmenu", event => event.preventDefault());
+    canvas.addEventListener("pointercancel", event => { endTouch(event); cancelGesture(); }); canvas.addEventListener("lostpointercapture", event => { if (changingCapture || canvas.hasPointerCapture(event.pointerId)) return; if (touches.has(event.pointerId)) resetTouches(); cancelGesture(); }); canvas.addEventListener("contextmenu", event => event.preventDefault());
     dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     dialog.addEventListener("keydown", event => {
       event.stopPropagation();
@@ -56,14 +59,27 @@
       else if (["delete", "backspace"].includes(key)) { event.preventDefault(); action("delete"); }
       else if (!modifier && { v: "pan", m: "rectangle", l: "lasso", w: "wand", b: "brush", e: "eraser", g: "bucket", i: "eyedropper" }[key]) action({ v: "pan", m: "rectangle", l: "lasso", w: "wand", b: "brush", e: "eraser", g: "bucket", i: "eyedropper" }[key]);
     });
-    window.addEventListener("blur", cancelGesture);
+    ui.viewport.addEventListener?.("pointerdown", event => { if (event.target !== canvas && event.pointerType === "touch") startTouch(event); });
+    ui.viewport.addEventListener?.("pointermove", event => { if (event.target !== canvas && event.pointerType === "touch") moveTouch(event); });
+    ui.viewport.addEventListener?.("pointerup", event => { if (event.target !== canvas) endTouch(event); });
+    ui.viewport.addEventListener?.("pointercancel", event => { if (event.target !== canvas) endTouch(event); });
+    ui.dialog.addEventListener("selectstart", event => { if (!event.target?.matches?.("input, textarea")) event.preventDefault(); });
+    ui.filters = ui.dialog.querySelector("#image-filters") || document.querySelector?.("#image-filters");
+    if (ui.filters) {
+      ui.filters.querySelectorAll("[data-filter-setting]").forEach(input => input.addEventListener("input", previewFilters));
+      ui.filters.querySelectorAll("[data-filter-close]").forEach(button => button.addEventListener("click", () => closeFilters(false)));
+      ui.filters.querySelector("[data-filter-apply]").addEventListener("click", () => closeFilters(true));
+      ui.filters.addEventListener("cancel", event => { event.preventDefault(); closeFilters(false); });
+      ui.filters.addEventListener("keydown", event => event.stopPropagation());
+    }
+    window.addEventListener("blur", () => { resetTouches(); cancelGesture(); });
   }
   function render() {
     ui.stage.style.width = `${canvas.width * zoom}px`; ui.stage.style.height = `${canvas.height * zoom}px`;
     ui.stage.dataset.tool = tool;
     ui.overlay.setAttribute("viewBox", `0 0 ${canvas.width} ${canvas.height}`);
     ui.selection.setAttribute("points", points.map(p => `${p.x},${p.y}`).join(" "));
-    ui.selection.setAttribute("stroke-width", String(1.5 / zoom)); ui.zoom.value = String(Math.round(zoom * 100));
+    ui.selection.setAttribute("stroke-width", String(1.5 / zoom)); if (ui.zoom) ui.zoom.value = String(Math.round(zoom * 100));
     const info = ui.dialog.querySelector("#image-editor-info"); if (info) info.textContent = `${canvas.width} × ${canvas.height} px · ${Math.round(zoom * 100)}%`;
     ui.dialog.querySelectorAll("[data-image-readout]").forEach(output => { output.textContent = output.dataset.imageReadout === "zoom" ? `${Math.round(zoom * 100)}%` : setting(output.dataset.imageReadout, ""); });
     const selected = !gesture && Boolean(maskRect);
@@ -121,7 +137,7 @@
   }
   function replaceCanvas(image, nextMask = null) { canvas.width = image.width; canvas.height = image.height; context.drawImage(image, 0, 0); setMask(nextMask); }
   function cancelGesture() {
-    hideLoupe();
+    hideLoupe(); pendingTouchAction = null;
     const current = gesture; gesture = null;
     if (current) {
       try { if (canvas.hasPointerCapture(current.id)) canvas.releasePointerCapture(current.id); } catch {}
@@ -130,8 +146,48 @@
       points = []; render();
     }
   }
+  function touchMetrics() {
+    const [a, b] = [...touches.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) };
+  }
+  function resetTouches() {
+    const ids = [...touches.keys()], previous = changingCapture;
+    touches.clear(); pinch = null; pinchBlocked = false; pendingTouchAction = null; hideLoupe();
+    changingCapture = true;
+    try { ids.forEach(id => { try { if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id); } catch {} }); }
+    finally { changingCapture = previous; }
+  }
+  function startTouch(event) {
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touches.size >= 2) {
+      if (!pinch) {
+        const m = touchMetrics(), rect = canvas.getBoundingClientRect();
+        pinch = { distance: m.distance, zoom, anchorX: (m.x - rect.left) / zoom, anchorY: (m.y - rect.top) / zoom };
+        pinchBlocked = true; pendingTouchAction = null; changingCapture = true;
+        try { cancelGesture(); touches.forEach((_, id) => { try { canvas.setPointerCapture(id); } catch {} }); } finally { changingCapture = false; }
+      }
+      event.preventDefault(); touches.forEach((_, id) => { try { canvas.setPointerCapture(id); } catch {} }); return true;
+    }
+    return pinchBlocked;
+  }
+  function moveTouch(event) {
+    if (!touches.has(event.pointerId)) return false;
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (!pinch || touches.size < 2) return pinchBlocked;
+    event.preventDefault(); const m = touchMetrics(); zoom = Math.max(.1, Math.min(8, pinch.zoom * m.distance / pinch.distance)); render();
+    const rect = canvas.getBoundingClientRect();
+    ui.viewport.scrollLeft += rect.left + pinch.anchorX * zoom - m.x;
+    ui.viewport.scrollTop += rect.top + pinch.anchorY * zoom - m.y;
+    return true;
+  }
+  function endTouch(event) {
+    if (!event || event.pointerType !== "touch") return;
+    touches.delete(event.pointerId); if (touches.size < 2) pinch = null;
+    if (!touches.size) pinchBlocked = false;
+    try { if (!gesture && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); } catch {}
+  }
   function point(event) { return canvasPoint(event.clientX, event.clientY, canvas.getBoundingClientRect(), canvas.width, canvas.height); }
-  function magicAt(p) { return pixelTools.magicMask(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, p.x, p.y, Number(setting("tolerance", 24)), checked("contiguous", true)); }
+  function magicAt(p) { const result = pixelTools.magicMask(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, p.x, p.y, Number(setting("tolerance", 24)), checked("contiguous", true)); return checked("antialias", true) ? pixelTools.refineMagicMask(result, canvas.width, canvas.height) : result; }
   function color() { const value = setting("color", "#79dfb5"); return [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16)); }
   function fillAt(p) {
     const selected = magicAt(p), data = context.getImageData(0, 0, canvas.width, canvas.height), rgb = color(), opacity = Number(setting("opacity", 100)) / 100;
@@ -153,9 +209,12 @@
     visible.width = visible.height = 0; gesture.last = p;
   }
   function begin(event) {
-    if (busy || gesture || !event.isPrimary || event.button !== 0) return;
+    if (busy || filterDraft) return;
+    if (event.pointerType === "touch" && startTouch(event)) return;
+    if (gesture || !event.isPrimary || event.button !== 0) return;
     event.preventDefault(); const start = point(event); showLoupe(event);
     if (event.pointerType === "touch" && ["wand", "bucket", "eyedropper"].includes(tool)) canvas.setPointerCapture(event.pointerId);
+    if (tool === "wand" && event.pointerType === "touch") { pendingTouchAction = { id: event.pointerId, p: start }; return; }
     if (tool === "wand") { snapshot(); setMask(pixelTools.combineMasks(mask, magicAt(start), setting("selection-mode", "replace"))); return; }
     if (tool === "bucket") { fillAt(start); return; }
     if (tool === "eyedropper") { const rgb = context.getImageData(Math.min(canvas.width - 1, Math.floor(start.x)), Math.min(canvas.height - 1, Math.floor(start.y)), 1, 1).data; const input = ui.dialog.querySelector('[data-image-setting="color"]'); if (input) input.value = `#${Array.from(rgb).slice(0, 3).map(v => v.toString(16).padStart(2, "0")).join("")}`; return; }
@@ -164,6 +223,8 @@
     canvas.setPointerCapture(event.pointerId); render();
   }
   function move(event) {
+    if (event.pointerType === "touch" && moveTouch(event)) return;
+    if (pendingTouchAction?.id === event.pointerId) pendingTouchAction.p = point(event);
     if (!gesture || gesture.id !== event.pointerId) { if (loupePointer === event.pointerId) showLoupe(event); return; }
     if (event.pointerType === "mouse" && !(event.buttons & 1)) { cancelGesture(); return; } event.preventDefault();
     if (tool === "pan") { ui.viewport.scrollLeft = gesture.scrollLeft - (event.clientX - gesture.clientX); ui.viewport.scrollTop = gesture.scrollTop - (event.clientY - gesture.clientY); points = []; }
@@ -175,6 +236,10 @@
     render();
   }
   function end(event) {
+    const blocked = pinchBlocked;
+    if (pendingTouchAction?.id === event.pointerId && !blocked) { const pending = pendingTouchAction; pendingTouchAction = null; snapshot(); setMask(pixelTools.combineMasks(mask, magicAt(pending.p), setting("selection-mode", "replace"))); }
+    endTouch(event);
+    if (blocked) return;
     if (loupePointer === event.pointerId) hideLoupe();
     if (!gesture || gesture.id !== event.pointerId) return;
     move({ clientX: event.clientX, clientY: event.clientY, pointerId: event.pointerId, pointerType: event.pointerType, buttons: 1, preventDefault() {} });
@@ -187,10 +252,12 @@
   function fit() { zoom = Math.max(.1, Math.min(1, (ui.viewport.clientWidth - 32) / canvas.width, (ui.viewport.clientHeight - 32) / canvas.height)); render(); }
   function action(id) {
     if (["close", "cancel"].includes(id)) { close(); return; } if (busy) return;
-    if (TOOLS.includes(id)) { cancelGesture(); tool = id; points = []; render(); return; } if (gesture) return; ui.error.textContent = "";
+    if (TOOLS.includes(id) && !ACTIVE_TOOLS.has(id)) return;
+    if (TOOLS.includes(id)) { resetTouches(); cancelGesture(); tool = id; points = []; render(); return; } if (gesture) return; ui.error.textContent = "";
     if ((id === "undo" && history.length) || (id === "redo" && redo.length)) {
       const source = id === "undo" ? history : redo, target = id === "undo" ? redo : history, old = source.pop(); target.push(capture()); replaceCanvas(old.image, old.mask); release(old); trimHistory();
     }
+    if (id === "filters") openFilters();
     if (id === "fit") fit(); if (id === "actual") { zoom = 1; render(); }
     if (id === "reset") { snapshot(); replaceCanvas(original); fit(); }
     if (["select-all", "deselect", "invert-selection"].includes(id)) { snapshot(); const selected = new Uint8Array(canvas.width * canvas.height); if (id === "select-all") selected.fill(255); else if (id === "invert-selection") for (let i = 0; i < selected.length; i++) selected[i] = 255 - (mask?.[i] || 0); setMask(id === "deselect" ? null : selected); }
@@ -211,8 +278,37 @@
       canvas.toBlob(blob => { if (version !== generation || !ui.dialog.open) return; busy = false; if (!blob) { ui.error.textContent = "Não foi possível salvar a imagem."; render(); return; } const callback = onApply; close(); callback(blob); }, "image/png");
     } render();
   }
+  function openFilters() {
+    if (!ui.filters || filterDraft) return;
+    resetTouches(); cancelGesture(); filterDraft = capture();
+    ui.filters.querySelectorAll("[data-filter-setting]").forEach(input => { input.value = input.getAttribute("data-default") || input.defaultValue; });
+    ui.filters.showModal(); renderFilterPreview();
+  }
+  function previewFilters() {
+    if (!filterDraft) return;
+    const value = key => ui.filters.querySelector(`[data-filter-setting="${key}"]`).value;
+    const source = filterDraft.image.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+    let pixels = pixelTools.adjustPixels(source.data, { brightness: Number(value("brightness")), saturation: Number(value("saturation")), contrast: Number(value("contrast")), grayscale: value("preset") === "grayscale" });
+    const block = Number(value("pixel-size"));
+    if (value("preset") === "pixelate") pixels = pixelTools.pixelatePixels(pixels, canvas.width, canvas.height, block);
+    if (filterDraft.mask) for (let i = 0; i < pixels.length; i++) if (i % 4 !== 3) pixels[i] = source.data[i] + (pixels[i] - source.data[i]) * filterDraft.mask[Math.floor(i / 4)] / 255;
+    source.data.set(pixels); context.putImageData(source, 0, 0); renderFilterPreview();
+  }
+  function renderFilterPreview() {
+    const preview = ui.filters.querySelector("#image-filter-preview"); if (!preview) return;
+    const scale = Math.min(1, 320 / canvas.width, 180 / canvas.height);
+    preview.width = Math.max(1, Math.round(canvas.width * scale)); preview.height = Math.max(1, Math.round(canvas.height * scale));
+    preview.getContext("2d").drawImage(canvas, 0, 0, preview.width, preview.height);
+  }
+  function closeFilters(commit) {
+    if (!filterDraft) return;
+    if (commit) previewFilters();
+    const previous = filterDraft; filterDraft = null;
+    if (commit) { pushHistory(previous); } else { replaceCanvas(previous.image, previous.mask); release(previous); }
+    if (ui.filters.open) ui.filters.close(); render();
+  }
   function close() {
-    if (!ui) return; generation++; cancelGesture(); if (ui.dialog.open) ui.dialog.close();
+    if (!ui) return; generation++; resetTouches(); cancelGesture(); closeFilters(false); if (ui.dialog.open) ui.dialog.close();
     history.forEach(release); redo.forEach(release); history = []; redo = []; points = []; mask = null; maskRect = null; onApply = null; busy = false;
     if (original) original.width = original.height = 0; original = null; canvas.width = canvas.height = maskCanvas.width = maskCanvas.height = ui.maskOverlay.width = ui.maskOverlay.height = 1;
   }

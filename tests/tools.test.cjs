@@ -13,7 +13,7 @@ function setup(){
     masterMenu:{dataset:{},hidden:false,contains:()=>false},masterPanel:{inert:true,contains:()=>false},
     masterTrigger:{attrs:{},setAttribute(k,v){this.attrs[k]=v},focus(){}},masterModeCheckbox:{checked:true},
     toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
-    document:{documentElement:{dataset:{}}},closeAssetExplorer(){},closeTokenTemplateEditor(){},closeSceneEditor(){},setTokenDockOpen(){},setSceneDockOpen(){},syncSceneDockAvailability(){},syncTokenDockAvailability(){},workspaceCard:{contains:t=>t?.onMap===true},
+    document:{documentElement:{dataset:{}}},closeAssetExplorer(){},closeTokenTemplateEditor(){},closeStatusEditor(){},closeSceneEditor(){},setTokenDockOpen(){},setSceneDockOpen(){},syncSceneDockAvailability(){},syncTokenDockAvailability(){},workspaceCard:{contains:t=>t?.onMap===true},
     Element:class{},rulerSession:null,ownsHighlightPointer:()=>false,dispatchHighlightInput(){},clearGridHighlights(){ctx.cleared++},cleared:0,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
   for(const name of ['isMasterMode','syncMasterMenuUI','setMasterMenuOpen','setMasterMode','hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
   assert.equal(vm.runInContext('typeof toggleTool',ctx),'function','tool selection is missing');

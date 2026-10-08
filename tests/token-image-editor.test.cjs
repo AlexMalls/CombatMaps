@@ -10,7 +10,7 @@ test('selection coordinates match zoomed canvas and rectangular crops stay withi
 });
 function editor(){
  const node=()=>({dataset:{},style:{},attrs:{},handlers:{},getAttribute(k){return this.attrs[k]},setAttribute(k,v){this.attrs[k]=v},addEventListener(k,f){this.handlers[k]=f}});
- const actions=['close','cancel','lasso','rectangle','ellipse','wand','brush','eraser','bucket','eyedropper','pan','left','right','crop','delete','undo','redo','apply','select-all','deselect','invert-selection','feather','smooth','expand','contract','adjust','grayscale','invert-color','flip-x','flip-y','reset'];
+ const actions=['close','cancel','lasso','rectangle','ellipse','wand','brush','eraser','bucket','eyedropper','pan','left','right','crop','delete','undo','redo','apply','select-all','deselect','invert-selection','feather','smooth','expand','contract','adjust','grayscale','invert-color','flip-x','flip-y','reset','filters'];
  const buttons=Object.fromEntries(actions.map(id=>[id,{...node(),dataset:{imageAction:id}}]));
  const zoom=node(),polygon=node(),overlay=node(),error=node(),stage=node(),viewport={clientWidth:800,clientHeight:600,scrollLeft:50,scrollTop:50},dialog={...node(),open:false,showModal(){this.open=true},close(){this.open=false}};
  const canvas=native.createCanvas(8,4),captures=new Set();canvas.handlers={};canvas.addEventListener=(k,f)=>canvas.handlers[k]=f;
@@ -22,11 +22,13 @@ function editor(){
  const seed=native.createCanvas(8,4),ctx=seed.getContext('2d');ctx.fillStyle='red';ctx.fillRect(0,0,4,4);ctx.fillStyle='blue';ctx.fillRect(4,0,4,4);
  const images=[];
  class Image{constructor(){const image=native.createCanvas(8,4);image.getContext('2d').drawImage(seed,0,0);image.naturalWidth=8;image.naturalHeight=4;Object.defineProperty(image,'src',{set(){images.push(image)}});return image;}}
- const c=vm.createContext({Math,Image,document:{getElementById:id=>id==='token-image-editor'?dialog:canvas,createElement:()=>native.createCanvas(1,1)},window:{innerWidth:800,innerHeight:600,document:{},TokenImageTools:require("../token-image-tools.js"),addEventListener(){}},Blob});
+ const filterSettings=Object.fromEntries(Object.entries({preset:'none',brightness:'0',contrast:'0',saturation:'0','pixel-size':'8'}).map(([key,value])=>[key,{...node(),value,defaultValue:value}]));filterSettings.preset.attrs['data-default']='none';
+ const filterApply=node(),filterCancel=node(),filters={...node(),open:false,showModal(){this.open=true},close(){this.open=false},querySelector:s=>s==='[data-filter-apply]'?filterApply:filterSettings[s.match(/data-filter-setting="([^"]+)"/)?.[1]],querySelectorAll:s=>s==='[data-filter-setting]'?Object.values(filterSettings):[filterCancel]};
+ const c=vm.createContext({Math,Image,document:{querySelector:s=>s==='#image-filters'?filters:null,getElementById:id=>id==='token-image-editor'?dialog:canvas,createElement:()=>native.createCanvas(1,1)},window:{innerWidth:800,innerHeight:600,document:{},TokenImageTools:require("../token-image-tools.js"),addEventListener(){}},Blob});
  // Script resolves global document and publishes its controller on window.
  vm.runInContext(source,c);
  const controller=c.window.TokenImageEditor;
- return {controller,images,canvas,dialog,buttons,error,captures,settings,loupe,click(id){buttons[id].handlers.click()},open(){controller.open('fixture',blob=>{this.result=blob});images.at(-1).onload()},select(points,tool='rectangle',pointerType='mouse'){
+ return {controller,images,canvas,dialog,buttons,error,captures,settings,loupe,filterSettings,filters,filterApply,filterCancel,stage,click(id){buttons[id].handlers.click()},open(){controller.open('fixture',blob=>{this.result=blob});images.at(-1).onload()},select(points,tool='rectangle',pointerType='mouse'){
   this.click(tool);points.forEach(([x,y],i)=>{const type=i===0?'pointerdown':i===points.length-1?'pointerup':'pointermove';canvas.handlers[type]({pointerId:1,isPrimary:true,button:0,buttons:type==='pointerup'?0:1,pointerType,clientX:x,clientY:y,preventDefault(){}})});
  },rgba(x,y){return Array.from(canvas.getContext('2d').getImageData(x,y,1,1).data)}};
 }
@@ -50,12 +52,9 @@ test('apply produces PNG only after confirmation and cancelled export does not l
 test('wand deletes only matched pixels and undo/redo restore image and selection',{skip:!native},()=>{
  const e=editor();e.open();e.click('wand');e.canvas.handlers.pointerdown({pointerId:2,pointerType:'mouse',isPrimary:true,button:0,clientX:1,clientY:1,preventDefault(){}});e.click('delete');assert.equal(e.rgba(1,1)[3],0);assert.equal(e.rgba(6,1)[3],255);e.click('undo');assert.equal(e.rgba(1,1)[3],255);e.click('redo');assert.equal(e.rgba(1,1)[3],0);
 });
-test('brush and eraser respect selection; cancelled strokes restore pixels',{skip:!native},()=>{
- const e=editor();e.open();e.select([[0,0],[4,4]]);e.settings['brush-size'].value='12';e.settings.color.value='#00ff00';e.select([[1,1],[7,1]],'brush');assert.equal(e.rgba(1,1)[1],255);assert.deepEqual(e.rgba(6,1),[0,0,255,255]);
- e.click('undo');assert.deepEqual(e.rgba(1,1),[255,0,0,255]);e.click('eraser');e.canvas.handlers.pointerdown({pointerId:1,pointerType:'touch',isPrimary:true,button:0,clientX:1,clientY:1,preventDefault(){}});assert.equal(e.rgba(1,1)[3],0);e.canvas.handlers.pointercancel();assert.deepEqual(e.rgba(1,1),[255,0,0,255]);assert.equal(e.loupe.hidden,true);
-});
-test('fill, flip, selected color adjustment and reset operate on native pixels',{skip:!native},()=>{
- const e=editor();e.open();e.settings.color.value='#00ff00';e.click('bucket');e.canvas.handlers.pointerdown({pointerId:1,isPrimary:true,button:0,clientX:1,clientY:1,preventDefault(){}});assert.deepEqual(e.rgba(1,1),[0,255,0,255]);assert.deepEqual(e.rgba(6,1),[0,0,255,255]);e.click('flip-x');assert.deepEqual(e.rgba(1,1),[0,0,255,255]);e.click('reset');assert.deepEqual(e.rgba(1,1),[255,0,0,255]);e.select([[0,0],[4,4]]);e.click('grayscale');assert.equal(e.rgba(1,1)[0],e.rgba(1,1)[1]);assert.deepEqual(e.rgba(6,1),[0,0,255,255]);
+test('disabled paint tools cannot modify the image while existing transforms still work',{skip:!native},()=>{
+ const e=editor();e.open();for(const tool of ['brush','eraser','bucket','eyedropper']){e.click(tool);e.canvas.handlers.pointerdown({pointerId:1,pointerType:'mouse',isPrimary:true,button:0,clientX:1,clientY:1,preventDefault(){}});e.canvas.handlers.pointerup({pointerId:1,pointerType:'mouse',button:0,clientX:1,clientY:1,preventDefault(){}});assert.deepEqual(e.rgba(1,1),[255,0,0,255]);}
+ e.click('flip-x');assert.deepEqual(e.rgba(1,1),[0,0,255,255]);e.click('reset');assert.deepEqual(e.rgba(1,1),[255,0,0,255]);e.select([[0,0],[4,4]]);e.click('grayscale');assert.equal(e.rgba(1,1)[0],e.rgba(1,1)[1]);assert.deepEqual(e.rgba(6,1),[0,0,255,255]);
 });
 test('touch loupe follows the finger above it, stays hidden for mouse and cleans up',{skip:!native},()=>{
  const e=editor();e.open();e.canvas.getBoundingClientRect=()=>({left:392,top:298,width:8,height:4});
@@ -67,4 +66,19 @@ test('touch loupe follows the finger above it, stays hidden for mouse and cleans
 test('feathered selections delete softly and loupe stays inside screen edges',{skip:!native},()=>{
  const e=editor();e.open();e.select([[0,0],[4,4]]);e.settings.feather.value='1';e.click('feather');e.click('delete');const alpha=e.rgba(3,1)[3];assert.ok(alpha>0&&alpha<255);assert.equal(e.rgba(7,1)[3],255);
  for(const [x,y] of [[0,0],[799,599],[400,300]]){const p=geometry.loupePosition(x,y,116,800,600);assert.ok(p.left>=8&&p.left+116<=792);assert.ok(p.top>=8&&p.top+116<=592);}
+});
+test('pinch cancels a selection, zooms, and capture loss cannot poison the next touch',{skip:!native},()=>{
+ const e=editor();e.open();e.canvas.getBoundingClientRect=()=>({left:0,top:0,width:parseFloat(e.stage.style.width),height:parseFloat(e.stage.style.height)});
+ const touch=(id,x,primary=true)=>({pointerId:id,pointerType:'touch',isPrimary:primary,button:0,buttons:1,clientX:x,clientY:1,preventDefault(){}});
+ e.canvas.handlers.pointerdown(touch(1,1));e.canvas.handlers.pointerdown(touch(2,5,false));e.canvas.handlers.pointermove(touch(2,9,false));assert.equal(e.stage.style.width,'16px');assert.equal(e.buttons.crop.disabled,true);
+ e.captures.delete(2);e.canvas.handlers.lostpointercapture(touch(2,9,false));assert.equal(e.captures.size,0);
+ e.select([[0,0],[8,8]],'rectangle','touch');assert.equal(e.buttons.crop.disabled,false);assert.equal(e.captures.size,0);
+});
+test('touch wand does not commit when the second finger starts a pinch',{skip:!native},()=>{
+ const e=editor();e.open();e.click('wand');const a={pointerId:1,pointerType:'touch',isPrimary:true,button:0,buttons:1,clientX:1,clientY:1,preventDefault(){}};
+ e.canvas.handlers.pointerdown(a);e.canvas.handlers.pointerdown({...a,pointerId:2,isPrimary:false,clientX:5});e.canvas.handlers.pointerup({...a,buttons:0});e.canvas.handlers.pointerup({...a,pointerId:2,isPrimary:false,buttons:0});assert.equal(e.buttons.crop.disabled,true);assert.equal(e.captures.size,0);
+});
+test('filter previews are noncumulative, cancellable and undoable',{skip:!native},()=>{
+ const e=editor();e.open();e.click('filters');e.filterSettings.preset.value='grayscale';e.filterSettings.preset.handlers.input();assert.equal(e.rgba(1,1)[0],e.rgba(1,1)[1]);e.filterSettings.preset.handlers.input();const preview=e.rgba(1,1);e.filterSettings.preset.handlers.input();assert.deepEqual(e.rgba(1,1),preview);e.filterCancel.handlers.click();assert.deepEqual(e.rgba(1,1),[255,0,0,255]);
+ e.click('filters');e.filterSettings.preset.value='grayscale';e.filterApply.handlers.click();assert.equal(e.rgba(1,1)[0],e.rgba(1,1)[1]);e.click('undo');assert.deepEqual(e.rgba(1,1),[255,0,0,255]);
 });

@@ -6,7 +6,7 @@ const path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const start=script.indexOf(`      function ${name}(`);assert.ok(start>=0,`${name} is implemented`);return script.slice(start,script.indexOf('\n      }',start)+8);}
-function setup(extra={}){const c=vm.createContext({Math,Number,Map,Promise,Intl,scenes:[],explorerState:{fileSizes:new Map()},...extra});for(const name of ['constrainExplorerBounds','resizeExplorerBounds','getAssetFileSize'])vm.runInContext(source(name),c);return c;}
+function setup(extra={}){const c=vm.createContext({Math,Number,Map,Promise,Intl,maps:[],statusTypes:[],scenes:[],explorerState:{fileSizes:new Map()},...extra});for(const name of ['constrainExplorerBounds','resizeExplorerBounds','getAssetFileSize'])vm.runInContext(source(name),c);return c;}
 function call(c,name,...args){c.args=args;return JSON.parse(JSON.stringify(vm.runInContext(`${name}(...args)`,c)));}
 test('window fits narrow mobile and stays inside viewport after rotation',()=>{
  const c=setup();const b=call(c,'constrainExplorerBounds',{x:700,y:500,width:760,height:480},{width:360,height:640});

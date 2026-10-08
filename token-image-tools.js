@@ -39,6 +39,19 @@
       for(let k=0;k<3;k++)result[i+k]=data[i+k]+(Math.max(0,Math.min(255,rgb[k]))-data[i+k])*weight;
     }return result;
   }
-  const api={magicMask,combineMasks,maskBounds,featherMask,smoothMask,growMask,adjustPixels};
+  function refineMagicMask(mask,width,height){
+    const cleaned=mask.slice();
+    for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){const i=y*width+x;if(mask[i])continue;let neighbors=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(mask[(y+dy)*width+x+dx])neighbors++;if(neighbors>=6)cleaned[i]=255;}
+    const result=new Uint8Array(mask.length);
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++){let sum=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)sum+=cleaned[Math.max(0,Math.min(height-1,y+dy))*width+Math.max(0,Math.min(width-1,x+dx))];result[y*width+x]=Math.round(sum/9);}return result;
+  }
+  function pixelatePixels(data,width,height,block=8){
+    block=Math.max(2,Math.min(100,Math.round(block)));const result=new Uint8ClampedArray(data);
+    for(let y=0;y<height;y+=block)for(let x=0;x<width;x+=block){let red=0,green=0,blue=0,alpha=0;const endY=Math.min(height,y+block),endX=Math.min(width,x+block);
+      for(let yy=y;yy<endY;yy++)for(let xx=x;xx<endX;xx++){const i=(yy*width+xx)*4,a=data[i+3];red+=data[i]*a;green+=data[i+1]*a;blue+=data[i+2]*a;alpha+=a;}
+      if(!alpha)continue;for(let yy=y;yy<endY;yy++)for(let xx=x;xx<endX;xx++){const i=(yy*width+xx)*4;result[i]=red/alpha;result[i+1]=green/alpha;result[i+2]=blue/alpha;}
+    }return result;
+  }
+  const api={refineMagicMask,pixelatePixels,magicMask,combineMasks,maskBounds,featherMask,smoothMask,growMask,adjustPixels};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;root.TokenImageTools=api;
 })(typeof window==='undefined'?globalThis:window);
