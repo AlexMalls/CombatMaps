@@ -31,6 +31,9 @@
       /* Fundos e superfícies */
       --color-universe: #031414;
       --color-background: #042323;
+      --color-frame: #01484a;
+      --token-dock-curve: 1rem;
+      --token-dock-width: 32rem;
       --color-surface: #073d3d;
       --color-surface-raised: #0b4c49;
       --color-surface-inset: #062c2c;
@@ -1118,6 +1121,37 @@
     :is(.grid-settings__slider-row, .app-settings__slider-row) input[type="range"] { flex: 1; }
     :is(.grid-settings__slider-row, .app-settings__slider-row) .ui-value { flex: 0 0 4.125rem; }
 
+    /* Barra de modelos: rounded tab com curvas inferiores abertas para a moldura. */
+    .token-dock {
+      position: fixed; left: 50%; bottom: var(--frame-thickness);
+      width: min(var(--token-dock-width), calc(100vw - 8rem));
+      min-height: 6.5rem;
+      padding: var(--space-2) calc(var(--token-dock-curve) + var(--space-2));
+      z-index: calc(var(--z-controls) + 3);
+      transform: translate(-50%, calc(100% + var(--frame-thickness)));
+      opacity: 0; visibility: hidden; pointer-events: none;
+      filter: drop-shadow(0 -8px 22px rgb(0 15 14 / 30%));
+      transition: transform var(--duration-menu) var(--ease-interface), opacity var(--duration-normal), visibility 0s var(--duration-menu);
+    }
+    .token-dock::before {
+      content: ""; position: absolute; inset: 0; z-index: -1;
+      border-inline: var(--token-dock-curve) solid transparent;
+      border-radius: calc(2 * var(--token-dock-curve)) calc(2 * var(--token-dock-curve)) 0 0 / var(--token-dock-curve);
+      background: linear-gradient(180deg, var(--color-surface-raised), var(--color-frame));
+      box-shadow: inset 0 1px 0 var(--color-border-hover);
+      -webkit-mask: radial-gradient(var(--token-dock-curve) at var(--token-dock-curve) 0, transparent 98%, #000 101%) calc(-1 * var(--token-dock-curve)) 100% / 100% var(--token-dock-curve) repeat-x, conic-gradient(#000 0 0) padding-box;
+      mask: radial-gradient(var(--token-dock-curve) at var(--token-dock-curve) 0, transparent 98%, #000 101%) calc(-1 * var(--token-dock-curve)) 100% / 100% var(--token-dock-curve) repeat-x, conic-gradient(#000 0 0) padding-box;
+    }
+    .token-dock[data-open="true"] { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+    .token-dock__list { display: flex; align-items: center; gap: var(--space-3); overflow-x: auto; min-height: 5.5rem; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x; }
+    .token-dock__item { flex: 0 0 auto; flex-direction: column; width: 4.75rem; min-height: 5rem; padding: var(--space-1); font-size: 0.7rem; touch-action: none; user-select: none; cursor: grab; }
+    .token-dock__item:active { cursor: grabbing; }
+    .token-dock__item img { width: 3rem; height: 3rem; object-fit: contain; pointer-events: none; }
+    .token-dock__empty { font-size: var(--font-size-small); color: var(--color-text-muted); }
+    .token-dock-ghost { position: fixed; z-index: var(--z-tooltip); pointer-events: none; opacity: 0.7; border: 1px solid var(--color-accent); border-radius: 0.25rem; background: var(--color-highlight-soft); box-shadow: 0 0 18px var(--color-magic-halo); }
+    .token-dock-ghost[data-valid="false"] { border-color: var(--color-danger); opacity: 0.4; }
+    .token-dock-ghost img { display: block; width: 100%; height: 100%; object-fit: contain; }
+
     /* Variante do painel geral: cores locais, controles continuam compartilhados. */
     .asset-explorer {
       --color-text: var(--color-explorer-highlight);
@@ -1360,7 +1394,7 @@
         </svg>
       </button>
       <span id="master-files-help" class="sr-only">Abrir o explorador de arquivos carregados no mapa.</span>
-      <button id="master-token" class="ui-tool" type="button" aria-label="Tokens — em breve" aria-disabled="true">
+      <button id="master-token" class="ui-tool" type="button" aria-label="Barra de tokens" aria-expanded="false" aria-controls="token-dock">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="5" r="3"/><path d="M8 10h8M10 10c0 5-2 6-3 8h10c-1-2-3-3-3-8M6 21h12l-1-3H7z"/>
         </svg>
@@ -1506,6 +1540,11 @@
     </section>
   </main>
 
+      <section id="token-dock" class="token-dock" data-open="false" aria-label="Modelos de token para adicionar ao mapa" inert>
+        <div id="token-dock-list" class="token-dock__list"></div>
+      </section>
+      <p id="token-dock-status" class="sr-only" role="status" aria-live="polite"></p>
+
       <dialog id="asset-explorer" class="asset-explorer" aria-labelledby="asset-explorer-title">
         <header id="asset-explorer-header" class="asset-explorer__header">
           <h2 id="asset-explorer-title">Arquivos do mapa</h2>
@@ -1547,6 +1586,12 @@
       const masterTrigger = document.getElementById("master-trigger");
       const masterPanel = document.getElementById("master-panel");
       const masterFilesButton = document.getElementById("master-files");
+      const masterTokenButton = document.getElementById("master-token");
+      const tokenDock = document.getElementById("token-dock");
+      const tokenDockList = document.getElementById("token-dock-list");
+      const tokenDockStatus = document.getElementById("token-dock-status");
+      let tokenDockDrag = null;
+      let nextTokenInstanceId = 1;
       const assetExplorer = document.getElementById("asset-explorer");
       const explorerHeader = document.getElementById("asset-explorer-header");
       const explorerClose = document.getElementById("asset-explorer-close");
@@ -1613,7 +1658,7 @@
       // Cada modelo define a imagem, o espaço no grid e a vida inicial dos seus tokens.
       // Futuras importações devem registrar modelos aqui, sem listar clones no Explorer.
       const TOKEN_TYPES = Object.freeze(firstToken ? {
-        soldiers: Object.freeze({ id: "soldiers", name: "Soldados", image: firstToken.querySelector(".token__image").getAttribute("src"), gridSize: 1, maxLife: 10000, status: "Normal" })
+        soldiers: Object.freeze({ id: "soldiers", instancePrefix: "soldados", name: "Soldados", image: firstToken.querySelector(".token__image").getAttribute("src"), gridSize: 1, maxLife: 10000, status: "Normal" })
       } : {});
       const testTokenLayout = [
         { number: 2, col: 3, row: 1 },
@@ -2029,6 +2074,7 @@
         visualTools: new Set(["heart"]),
         masterMode: true,
         masterMenuOpen: false,
+        tokenDockOpen: false,
         touchMode: touchCapable,
         visible: true,
         absolute: false,
@@ -2044,6 +2090,190 @@
         cameraX: 0,
         cameraY: 0
       };
+
+      function syncTokenDockAvailability() {
+        const disabled = !isMasterMode() || hasPriorityTool() || state.isMoving;
+        tokenDockList.querySelectorAll("[data-token-template]").forEach(button => { button.disabled = disabled; });
+      }
+
+      function setTokenDockOpen(open, { restoreFocus = false } = {}) {
+        state.tokenDockOpen = isMasterMode() && Boolean(open);
+        if (!state.tokenDockOpen) {
+          cancelTokenDockDrag();
+          if (restoreFocus || tokenDock.contains(document.activeElement)) masterTokenButton.focus({ preventScroll: true });
+        }
+        tokenDock.dataset.open = String(state.tokenDockOpen);
+        tokenDock.inert = !state.tokenDockOpen;
+        masterTokenButton.setAttribute("aria-expanded", String(state.tokenDockOpen));
+        syncTokenDockAvailability();
+      }
+
+      function renderTokenDock() {
+        tokenDockList.replaceChildren();
+        for (const type of Object.values(TOKEN_TYPES)) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "token-dock__item";
+          button.dataset.tokenTemplate = type.id;
+          button.setAttribute("aria-label", `Arrastar ${type.name} para o mapa`);
+          const image = document.createElement("img");
+          image.src = type.image;
+          image.alt = "";
+          image.draggable = false;
+          const label = document.createElement("span");
+          label.textContent = type.name;
+          button.append(image, label);
+          button.addEventListener("pointerdown", event => beginTokenDockDrag(event, type.id));
+          button.addEventListener("dragstart", event => event.preventDefault());
+          tokenDockList.append(button);
+        }
+        if (!Object.keys(TOKEN_TYPES).length) {
+          const empty = document.createElement("span");
+          empty.className = "token-dock__empty";
+          empty.textContent = "Nenhum token carregado";
+          tokenDockList.append(empty);
+        }
+        syncTokenDockAvailability();
+      }
+
+      function canPlaceTokenFootprint(candidate) {
+        const origin = getGridOrigin(), cell = state.size;
+        const x = origin.x + candidate.col * cell, y = origin.y + candidate.row * cell;
+        if (x < 0 || y < 0 || x + candidate.size * cell > workspaceLayers.clientWidth || y + candidate.size * cell > workspaceLayers.clientHeight) return false;
+        return !tokens.some(token => getTokenInfo(token)?.life > 0 && gridFootprintsOverlap(candidate, getTokenGridState(token))) &&
+          !gridPointMarkers.some(marker => gridFootprintsOverlap(candidate, marker));
+      }
+
+      function getTokenDropCell(typeId, clientX, clientY) {
+        const type = TOKEN_TYPES[typeId];
+        if (!type) return null;
+        const local = clientToWorkspaceLayer(clientX, clientY);
+        if (!local.insideViewport) return null;
+        const origin = getGridOrigin();
+        const candidate = { col: Math.floor((local.x - origin.x) / state.size), row: Math.floor((local.y - origin.y) / state.size), size: type.gridSize };
+        return canPlaceTokenFootprint(candidate) ? candidate : null;
+      }
+
+      function nextTokenId(typeId) {
+        const prefix = TOKEN_TYPES[typeId].instancePrefix || typeId;
+        let id;
+        do { id = `${prefix}-${String(nextTokenInstanceId++).padStart(2, "0")}`; } while (tokenData.has(id));
+        return id;
+      }
+
+      function createTokenFromType(typeId, cell) {
+        const type = TOKEN_TYPES[typeId];
+        if (!isMasterMode() || hasPriorityTool() || state.isMoving || !type || !cell || !canPlaceTokenFootprint(cell)) return null;
+        const token = document.createElement("article");
+        const id = nextTokenId(typeId);
+        token.id = `token-${id}`;
+        token.className = "token";
+        Object.assign(token.dataset, { type: "token", tokenId: id, tokenType: typeId, gridCol: String(cell.col), gridRow: String(cell.row), gridSize: String(type.gridSize), selected: "false" });
+        token.tabIndex = 0;
+        token.setAttribute("role", "button");
+        token.setAttribute("aria-label", `${type.name} ${id}. Clique para selecionar; segure para ver o status.`);
+        const image = document.createElement("img");
+        image.className = "token__image";
+        image.src = type.image;
+        image.alt = type.name;
+        image.draggable = false;
+        image.addEventListener("load", () => { if (token.isConnected) updateTokenGeometry(token); });
+        token.append(image);
+        if (TOKEN_RESIZE_ENABLED) {
+          for (const corner of ["nw", "ne", "sw", "se"]) {
+            const handle = document.createElement("button");
+            handle.type = "button";
+            handle.className = `token__resize-handle token__resize-handle--${corner}`;
+            handle.dataset.resizeCorner = corner;
+            handle.setAttribute("aria-label", "Redimensionar token");
+            token.append(handle);
+          }
+        }
+        workspaceLayers.append(token);
+        tokens.push(token);
+        registerTokenData(token);
+        initializeTokenDamage(token);
+        initializeTokenInteraction(token);
+        updateTokenGeometry(token);
+        movementRedoHistory.length = 0;
+        movementHistory.push({ kind: "spawn", token, tokenId: id, cell: { ...cell } });
+        if (movementHistory.length > MOVEMENT_HISTORY_LIMIT) movementHistory.shift();
+        updateMovementHistoryUI();
+        tokenDockStatus.textContent = `${type.name} adicionado ao mapa.`;
+        return token;
+      }
+
+      function getDockDropAtClient(typeId, clientX, clientY) {
+        const hit = document.elementFromPoint(clientX, clientY);
+        if (!hit || !cameraViewport.contains(hit) || hit.closest(".corner-settings, .token-dock, .token-status, .token-action-menu, dialog")) return null;
+        return getTokenDropCell(typeId, clientX, clientY);
+      }
+
+      function updateTokenDockGhost(clientX, clientY) {
+        const drag = tokenDockDrag;
+        if (!drag) return;
+        const cell = getDockDropAtClient(drag.typeId, clientX, clientY);
+        const type = TOKEN_TYPES[drag.typeId], pixels = type.gridSize * state.size * state.cameraZoom;
+        let left = clientX - pixels / 2, top = clientY - pixels / 2;
+        if (cell) {
+          const origin = getGridOrigin(), rect = cameraViewport.getBoundingClientRect();
+          left = rect.left + state.cameraX + (origin.x + cell.col * state.size) * state.cameraZoom;
+          top = rect.top + state.cameraY + (origin.y + cell.row * state.size) * state.cameraZoom;
+        }
+        Object.assign(drag.ghost.style, { left: `${left}px`, top: `${top}px`, width: `${pixels}px`, height: `${pixels}px` });
+        drag.ghost.dataset.valid = String(Boolean(cell));
+      }
+
+      function beginTokenDockDrag(event, typeId) {
+        if (!isMasterMode() || !state.tokenDockOpen || hasPriorityTool() || state.isMoving || tokenDockDrag || event.button !== 0 || !event.isPrimary || !TOKEN_TYPES[typeId]) return;
+        event.preventDefault();
+        event.stopPropagation();
+        cancelWorkspaceGestures("arraste de um modelo de token");
+        const ghost = document.createElement("div");
+        ghost.className = "token-dock-ghost";
+        ghost.setAttribute("aria-hidden", "true");
+        const image = document.createElement("img");
+        image.src = TOKEN_TYPES[typeId].image;
+        image.alt = "";
+        ghost.append(image);
+        document.body.append(ghost);
+        tokenDockDrag = { pointerId: event.pointerId, pointerType: event.pointerType, target: event.currentTarget, typeId, ghost, startX: event.clientX, startY: event.clientY, moved: false };
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch { cancelTokenDockDrag(); return; }
+        updateTokenDockGhost(event.clientX, event.clientY);
+      }
+
+      function cancelTokenDockDrag() {
+        const drag = tokenDockDrag;
+        if (!drag) return;
+        tokenDockDrag = null;
+        drag.ghost.remove();
+        try { if (drag.target.hasPointerCapture(drag.pointerId)) drag.target.releasePointerCapture(drag.pointerId); } catch {}
+      }
+
+      function dispatchTokenDockInput(event) {
+        const drag = tokenDockDrag;
+        if (!drag) return;
+        if (event.type === "keydown" && event.key === "Escape") {
+          event.preventDefault(); event.stopImmediatePropagation(); cancelTokenDockDrag(); return;
+        }
+        if (event.type === "pointerdown" && event.pointerType === "touch" && event.pointerId !== drag.pointerId) {
+          event.preventDefault(); event.stopImmediatePropagation(); cancelTokenDockDrag(); return;
+        }
+        if (event.pointerId !== drag.pointerId) return;
+        if (event.cancelable) event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type === "pointermove") {
+          if (event.pointerType === "mouse" && !(event.buttons & 1)) { cancelTokenDockDrag(); return; }
+          drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6;
+          updateTokenDockGhost(event.clientX, event.clientY);
+        } else if (event.type === "pointerup") {
+          const moved = drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6;
+          const cell = moved ? getDockDropAtClient(drag.typeId, event.clientX, event.clientY) : null;
+          cancelTokenDockDrag();
+          if (cell) createTokenFromType(drag.typeId, cell);
+          else if (moved) tokenDockStatus.textContent = "Solte o token em uma célula livre do mapa.";
+        } else if (event.type === "pointercancel" || event.type === "lostpointercapture") cancelTokenDockDrag();
+      }
 
       // Explorer não modal: seus gestos e medidas são independentes da câmera.
       function constrainExplorerBounds(bounds, viewport) {
@@ -2226,6 +2456,7 @@
         document.documentElement.dataset.masterMode = String(state.masterMode);
         if (!state.masterMode) {
           state.masterMenuOpen = false;
+          setTokenDockOpen(false, { restoreFocus: false });
           closeAssetExplorer({ restoreFocus: false });
           if (masterMenu.contains(document.activeElement)) masterModeCheckbox.focus({ preventScroll: true });
         }
@@ -2250,6 +2481,7 @@
       }
 
       function syncToolsUI() {
+        syncTokenDockAvailability();
         toolsMenu.dataset.open = String(state.toolsOpen);
         toolsTrigger.setAttribute("aria-expanded", String(state.toolsOpen));
         toolsPanel.inert = !state.toolsOpen;
@@ -2294,7 +2526,7 @@
         // Tab e os controles de canto continuam permitindo sair da ferramenta.
         if (event.type === "keydown" && event.key === "Tab") return false;
         const target = event.target;
-        if (target instanceof Element && target.closest(".corner-settings, dialog")) return false;
+        if (target instanceof Element && target.closest(".corner-settings, .token-dock, dialog")) return false;
         if (workspaceCard.contains(target)) return true;
         return event.type === "keydown" && (event.key === "Escape" ||
           ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(event.key.toLowerCase())));
@@ -2519,6 +2751,11 @@
         if (!highlightTouches.size) highlightBlocked = false;
       });
 
+      // O arraste de modelos pertence à interface, não aos gestos da câmera.
+      ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture", "keydown"].forEach(type => {
+        document.addEventListener(type, dispatchTokenDockInput, { capture: true, passive: false });
+      });
+
       // A barreira roda antes dos handlers de tokens, câmera e multitoque.
       // Consulta é não modal: um clique fora fecha todas, mas soltar um clique
       // longo não conta como clique fora das janelas que ele acabou de abrir.
@@ -2546,6 +2783,8 @@
       toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
       masterFilesButton.addEventListener("click", openAssetExplorer);
+      masterTokenButton.addEventListener("click", () => setTokenDockOpen(!state.tokenDockOpen));
+      renderTokenDock();
       tokenImagePicker.addEventListener("change", discardTokenImageSelection);
       tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
       explorerClose.addEventListener("click", () => closeAssetExplorer());
@@ -3024,6 +3263,18 @@
         }
 
         const entry = movementHistory.pop();
+        if (entry.kind === "spawn") {
+          cancelWorkspaceGestures("adição de token desfeita");
+          deselectToken(entry.token);
+          closeTokenStatus(entry.token);
+          const index = tokens.indexOf(entry.token);
+          if (index >= 0) tokens.splice(index, 1);
+          entry.token.remove();
+          movementRedoHistory.push(entry);
+          updateAllTokens();
+          updateMovementHistoryUI();
+          return true;
+        }
         if (entry.kind === "health") {
           if (!entry.token?.isConnected) { updateMovementHistoryUI(); return false; }
           movementRedoHistory.push(entry);
@@ -3088,6 +3339,20 @@
         }
 
         const entry = movementRedoHistory.pop();
+        if (entry.kind === "spawn") {
+          if (!canPlaceTokenFootprint(entry.cell)) {
+            movementRedoHistory.push(entry);
+            updateMovementHistoryUI();
+            return false;
+          }
+          Object.assign(entry.token.dataset, { gridCol: String(entry.cell.col), gridRow: String(entry.cell.row), gridSize: String(entry.cell.size) });
+          workspaceLayers.append(entry.token);
+          tokens.push(entry.token);
+          movementHistory.push(entry);
+          updateAllTokens();
+          updateMovementHistoryUI();
+          return true;
+        }
         if (entry.kind === "health") {
           if (!entry.token?.isConnected) { updateMovementHistoryUI(); return false; }
           movementHistory.push(entry);
@@ -3807,7 +4072,7 @@
       workspaceCard.addEventListener("pointerup", endTokenPress);
       workspaceCard.addEventListener("pointercancel", event => cancelTokenPress(event.pointerId));
 
-      tokens.forEach(token => {
+      function initializeTokenInteraction(token) {
         token.setAttribute("aria-pressed", "false");
         token.addEventListener("contextmenu", event => {
           if (tokenTapCandidates.get(event.pointerId)?.held || [...tokenTapCandidates.values()].some(candidate => candidate.token === token && candidate.held)) {
@@ -3852,7 +4117,8 @@
             handle.addEventListener("pointerdown", event => beginTokenResize(event, token, handle.dataset.resizeCorner));
           });
         }
-      });
+      }
+      tokens.forEach(initializeTokenInteraction);
 
       let threeFingerGestureLatched = false;
       const threeFingerPointers = new Map();
@@ -5004,6 +5270,7 @@
 
       // Uma única saída para interromper gestos sem confirmar seus destinos.
       function cancelWorkspaceGestures(reason = "cancelado") {
+        cancelTokenDockDrag();
         finishExplorerGesture();
         finishTokenStatusDrag();
         finishRulerMeasurement();
@@ -5448,7 +5715,7 @@
         if (!tokenActionMenu.hidden && !tokenActionMenu.contains(event.target)) closeTokenActionMenu();
       });
       document.addEventListener("contextmenu", event => {
-        if (event.target.closest?.(".asset-explorer")) return;
+        if (event.target.closest?.(".asset-explorer, .token-dock")) return;
         if (performance.now() < suppressContextMenuUntil) {
           event.preventDefault();
           event.stopPropagation();
@@ -5499,6 +5766,10 @@
 
         if (event.key !== "Escape") return;
         let handled = false;
+        if (state.tokenDockOpen) {
+          setTokenDockOpen(false, { restoreFocus: true });
+          handled = true;
+        }
         if (desktopCameraPan) {
           const session = desktopCameraPan;
           desktopCameraPan = null;

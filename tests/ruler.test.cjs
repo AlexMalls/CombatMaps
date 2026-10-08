@@ -67,14 +67,14 @@ test('focus cleanup removes an active ruler and cancels its pending frame',()=>{
   const c=setup();c.send('pointerdown');c.send('pointermove',{clientX:600});
   Object.assign(c,{canvasTapCandidates:new Map(),tokenTapCandidates:new Map(),touchDeselectPointers:new Map(),
     threeFingerPointers:new Map(),formationSession:null,lassoSession:null,desktopCameraPan:null,
-    cancelPendingCanvasInteractions(){},finishExplorerGesture(){},finishTokenStatusDrag(){}, cancelAllTokenPresses(){},cancelActiveLasso(){},cancelBlockProjection(){},resetTouchPairState(){},closeTokenActionMenu(){}});
+    cancelPendingCanvasInteractions(){},finishExplorerGesture(){},cancelTokenDockDrag(){},finishTokenStatusDrag(){}, cancelAllTokenPresses(){},cancelActiveLasso(){},cancelBlockProjection(){},resetTouchPairState(){},closeTokenActionMenu(){}});
   vm.runInContext(source('cancelWorkspaceGestures')+';cancelWorkspaceGestures("blur")',c);
   assert.equal(c.rulerSession,null);assert.equal(c.frames.size,0);assert.equal(c.captures.size,0);assert.equal(c.rulerLayer.dataset.active,'false');
 });
 test('unexpected capture loss clears only the active measurement pointer',()=>{
   const c=setup();c.workspaceCard.addEventListener=(type,fn)=>{c.lostCapture=fn};
   const start=script.indexOf('      workspaceCard.addEventListener("lostpointercapture", event => {\n        if (rulerSession');
-  const end=script.indexOf('      // A barreira',start);
+  const end=script.indexOf('      // O arraste de modelos',start);
   vm.runInContext(script.slice(start,end),c);
   c.send('pointerdown');c.lostCapture({pointerId:2});assert.ok(c.rulerSession);
   c.lostCapture({pointerId:1});assert.equal(c.rulerSession,null);assert.equal(c.rulerLayer.dataset.active,'false');
