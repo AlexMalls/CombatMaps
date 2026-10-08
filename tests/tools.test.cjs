@@ -8,12 +8,14 @@ const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const start=script.indexOf(`      function ${name}(`);return start<0?'':script.slice(start,script.indexOf('\n      }',start)+8);}
 function setup(){
   const buttons=['ruler','heart'].map(id=>({dataset:{tool:id},attrs:{},setAttribute(k,v){this.attrs[k]=v}}));
-  const ctx=vm.createContext({state:{toolsOpen:false,activeTool:null,visualTools:new Set(),isMoving:false},
+  const ctx=vm.createContext({state:{toolsOpen:false,activeTool:null,visualTools:new Set(),isMoving:false,masterMode:true,masterMenuOpen:false},
     TOOL_DEFINITIONS:{ruler:{type:'priority'},heart:{type:'visual'},other:{type:'priority'}},toolButtons:buttons,
+    masterMenu:{dataset:{},hidden:false,contains:()=>false},masterPanel:{inert:true,contains:()=>false},
+    masterTrigger:{attrs:{},setAttribute(k,v){this.attrs[k]=v},focus(){}},masterModeCheckbox:{checked:true},
     toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
     document:{documentElement:{dataset:{}}},workspaceCard:{contains:t=>t?.onMap===true},
     Element:class{},rulerSession:null,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
-  for(const name of ['hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
+  for(const name of ['isMasterMode','syncMasterMenuUI','setMasterMenuOpen','setMasterMode','hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);
   assert.equal(vm.runInContext('typeof toggleTool',ctx),'function','tool selection is missing');
   return ctx;
 }
@@ -92,4 +94,19 @@ test('heart switches only the shared damage visibility flag while keeping the ac
   vm.runInContext('toggleTool("ruler");toggleTool("heart")',c);
   assert.equal(c.document.documentElement.dataset.showTokenDamage,'false');assert.equal(c.state.activeTool,'ruler');
   vm.runInContext('toggleTool("heart")',c);assert.equal(c.document.documentElement.dataset.showTokenDamage,'true');
+});
+
+test('master toolbar opens by its trigger, stays open outside and becomes inert when closed',()=>{
+  const c=setup();vm.runInContext('setMasterMenuOpen(true)',c);
+  assert.equal(c.masterMenu.dataset.open,'true');assert.equal(c.masterPanel.inert,false);assert.equal(c.masterTrigger.attrs['aria-expanded'],'true');
+  c.tokenActionMenu={hidden:true};c.document.addEventListener=(type,fn)=>{c.outsideClick=fn};
+  const start=script.indexOf('      document.addEventListener("pointerdown", event => {\n        if (state.open');
+  vm.runInContext(script.slice(start,script.indexOf('      document.addEventListener("focusin"',start)),c);
+  c.outsideClick({target:{}});assert.equal(c.masterMenu.dataset.open,'true');
+  vm.runInContext('setMasterMenuOpen(false)',c);assert.equal(c.masterPanel.inert,true);assert.equal(c.masterTrigger.attrs['aria-expanded'],'false');
+});
+test('disabling master mode hides its toolbar, closes it, and prevents opening until enabled',()=>{
+  const c=setup();vm.runInContext('setMasterMenuOpen(true);setMasterMode(false);setMasterMenuOpen(true)',c);
+  assert.equal(c.masterMenu.hidden,true);assert.equal(c.state.masterMenuOpen,false);assert.equal(c.masterPanel.inert,true);
+  vm.runInContext('setMasterMode(true)',c);assert.equal(c.masterMenu.hidden,false);assert.equal(c.masterMenu.dataset.open,'false');
 });
