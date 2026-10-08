@@ -14,8 +14,8 @@ test('corner resize is independent on both axes and image can be moved to fill t
  assert.deepEqual(plain(c.resizeSceneBackground(moved,600,0,800,400)),{x:0,y:0,width:800,height:400});
  const min=c.resizeSceneBackground(moved,-999,-999,800,400);assert.equal(min.width,16);assert.equal(min.height,16);
 });
-test('all category plus buttons route to scene creation or native file selection',()=>{
- let opened=0,clicked=0;const c=vm.createContext({isMasterMode:()=>true,assetExplorer:{open:true},explorerState:{category:'scenes'},openSceneEditor(){opened++},chooseTokenImage(){clicked++},tokenImagePicker:{value:'old',click(){clicked++}}});
+test('category plus buttons open scene/token editors or the native picker',()=>{
+ let opened=0,clicked=0;const c=vm.createContext({isMasterMode:()=>true,assetExplorer:{open:true},explorerState:{category:'scenes'},openSceneEditor(){opened++},openTokenTemplateEditor(){clicked++},tokenImagePicker:{value:'old',click(){clicked++}}});
  vm.runInContext(source('addAssetForCategory'),c);c.addAssetForCategory();assert.equal(opened,1);
  for(const category of ['tokens','maps','status']){c.explorerState.category=category;c.addAssetForCategory();}assert.equal(clicked,3);assert.equal(c.tokenImagePicker.accept,'');
  c.isMasterMode=()=>false;c.addAssetForCategory();assert.equal(clicked,3);

@@ -1240,6 +1240,7 @@
       max-height: calc(100dvh - 1.5rem); padding: 0; overflow: auto;
       background: var(--color-explorer-shell); border-color: var(--color-border-hover);
     }
+    .token-template__preview { display: block; width: 100%; max-height: 45vh; object-fit: contain; }
     .scene-editor[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
     .scene-editor__body { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; min-height: 0; overflow: auto; }
     .scene-editor .asset-explorer__header { cursor: default; touch-action: auto; }
@@ -1614,6 +1615,37 @@
         <button type="button" class="asset-explorer__corner" data-explorer-corner="se" aria-label="Redimensionar pelo canto inferior direito"></button>
       </dialog>
 
+      <dialog id="token-template-editor" class="scene-editor token-template-editor" aria-labelledby="token-template-title">
+        <header class="asset-explorer__header">
+          <h2 id="token-template-title">Novo token</h2>
+          <button id="token-template-close" class="asset-explorer__close" type="button" aria-label="Fechar novo token">×</button>
+        </header>
+        <div class="scene-editor__body">
+          <section class="scene-editor__preview-pane" aria-label="Prévia do token">
+            <img id="token-template-preview" class="token-template__preview" alt="Prévia da imagem do token" hidden>
+            <p id="token-template-empty" class="asset-explorer__empty">Escolha uma imagem para o token.</p>
+          </section>
+          <aside class="asset-explorer__content scene-editor__settings">
+            <label for="token-template-name">Nome do token</label>
+            <input id="token-template-name" type="text" maxlength="80" placeholder="Nome do token" autocomplete="off">
+            <button id="token-template-choose" type="button">Escolher imagem (obrigatória)</button>
+            <input id="token-template-picker" type="file" accept="image/*" hidden>
+            <p id="token-template-file" class="scene-editor__filename">Nenhuma imagem selecionada</p>
+            <label for="token-template-size">Tamanho padrão</label>
+            <div class="grid-settings__slider-row">
+              <input id="token-template-size" type="range" min="1" max="10" step="1" value="1" aria-label="Tamanho padrão do token">
+              <input id="token-template-size-value" class="ui-value" type="number" min="1" max="10" step="1" value="1" aria-label="Tamanho padrão do token em quadrados">
+            </div>
+            <output id="token-template-footprint">1 × 1</output>
+            <p id="token-template-error" class="scene-editor__error" role="status" aria-live="polite"></p>
+          </aside>
+        </div>
+        <footer class="scene-editor__footer">
+          <button id="token-template-cancel" type="button">Cancelar</button>
+          <button id="token-template-confirm" class="ui-button--primary" type="button" disabled>Criar token</button>
+        </footer>
+      </dialog>
+
       <dialog id="scene-editor" class="scene-editor" aria-labelledby="scene-editor-title">
         <header class="asset-explorer__header">
           <h2 id="scene-editor-title">Nova cena</h2>
@@ -1685,6 +1717,18 @@
       const explorerClose = document.getElementById("asset-explorer-close");
       const explorerContent = document.getElementById("asset-explorer-content");
       const tokenImagePicker = document.getElementById("token-image-picker");
+      const tokenTemplateEditor = document.getElementById("token-template-editor");
+      const tokenTemplateName = document.getElementById("token-template-name");
+      const tokenTemplatePicker = document.getElementById("token-template-picker");
+      const tokenTemplatePreview = document.getElementById("token-template-preview");
+      const tokenTemplateEmpty = document.getElementById("token-template-empty");
+      const tokenTemplateFile = document.getElementById("token-template-file");
+      const tokenTemplateError = document.getElementById("token-template-error");
+      const tokenTemplateConfirm = document.getElementById("token-template-confirm");
+      const tokenTemplateSettings = { size: 1 };
+      const tokenTemplateState = { draft: null, loadVersion: 0, pendingUrl: null };
+      let tokenTemplateSizeControl;
+      let nextTokenTypeId = 1;
       // Cenas locais desta sessão: cada uma mantém seus tokens e seu histórico.
       let activeSceneId = null;
       const scenes = [];
@@ -1765,9 +1809,9 @@
       // Catálogo de TIPOS carregados, independente das instâncias presentes no mapa.
       // Cada modelo define a imagem, o espaço no grid e a vida inicial dos seus tokens.
       // Futuras importações devem registrar modelos aqui, sem listar clones no Explorer.
-      const TOKEN_TYPES = Object.freeze(firstToken ? {
+      const TOKEN_TYPES = firstToken ? {
         soldiers: Object.freeze({ id: "soldiers", instancePrefix: "soldados", name: "Soldados", image: firstToken.querySelector(".token__image").getAttribute("src"), gridSize: 1, maxLife: 10000, status: "Normal" })
-      } : {});
+      } : {};
       const testTokenLayout = [
         { number: 2, col: 3, row: 1 },
         { number: 3, col: -3, row: -2 },
@@ -2450,7 +2494,7 @@
           add.className = "ui-button--primary asset-explorer__add";
           add.textContent = "+";
           add.setAttribute("aria-label", explorerState.category === "scenes" ? "Nova cena" : `Adicionar em ${labels[explorerState.category]}`);
-          if (explorerState.category !== "scenes") add.setAttribute("aria-describedby", "token-image-picker-help");
+          if (!["scenes", "tokens"].includes(explorerState.category)) add.setAttribute("aria-describedby", "token-image-picker-help");
           add.addEventListener("click", addAssetForCategory);
           toolbar.append(add);
         }
@@ -2505,6 +2549,97 @@
         explorerContent.append(list);
       }
 
+      function initializeTokenTemplateControls() {
+        tokenTemplateSizeControl = createNumericControl({
+          rangeId: "token-template-size", valueId: "token-template-size-value", stateKey: "size", targetState: tokenTemplateSettings,
+          format: value => ({ input: String(value), aria: `${value} por ${value} quadrados` }),
+          apply: value => { document.getElementById("token-template-footprint").textContent = `${value} × ${value}`; }
+        });
+      }
+
+      function openTokenTemplateEditor() {
+        if (!isMasterMode() || !assetExplorer.open || tokenTemplateEditor.open) return;
+        cancelWorkspaceGestures("novo tipo de token");
+        tokenTemplateState.draft = { image: "", fileName: "", fileSize: 0, loading: false };
+        tokenTemplateName.value = "";
+        tokenTemplatePicker.value = "";
+        tokenTemplatePreview.removeAttribute("src");
+        tokenTemplatePreview.hidden = true;
+        tokenTemplateEmpty.hidden = false;
+        tokenTemplateFile.textContent = "Nenhuma imagem selecionada";
+        tokenTemplateError.textContent = "";
+        tokenTemplateConfirm.disabled = true;
+        tokenTemplateSizeControl.set(1);
+        tokenTemplateEditor.showModal();
+      }
+
+      function selectTokenTemplateImage(event) {
+        const file = event.target.files?.[0], draft = tokenTemplateState.draft;
+        tokenTemplatePicker.value = "";
+        if (!file || !draft || !tokenTemplateEditor.open || !isMasterMode()) return;
+        if (file.type && !file.type.startsWith("image/")) { tokenTemplateError.textContent = "Selecione um arquivo de imagem."; return; }
+        const version = ++tokenTemplateState.loadVersion;
+        if (tokenTemplateState.pendingUrl) URL.revokeObjectURL(tokenTemplateState.pendingUrl);
+        const url = URL.createObjectURL(file), image = new Image();
+        tokenTemplateState.pendingUrl = url;
+        draft.loading = true;
+        tokenTemplateConfirm.disabled = true;
+        tokenTemplateError.textContent = "Carregando imagem…";
+        const current = () => tokenTemplateState.draft === draft && tokenTemplateState.loadVersion === version && tokenTemplateEditor.open;
+        image.onload = () => {
+          if (!current()) { URL.revokeObjectURL(url); return; }
+          if (!image.naturalWidth || !image.naturalHeight) { image.onerror(); return; }
+          if (draft.image) URL.revokeObjectURL(draft.image);
+          Object.assign(draft, { image: url, fileName: file.name, fileSize: file.size, loading: false });
+          tokenTemplateState.pendingUrl = null;
+          tokenTemplatePreview.src = url;
+          tokenTemplatePreview.hidden = false;
+          tokenTemplateEmpty.hidden = true;
+          tokenTemplateFile.textContent = file.name;
+          tokenTemplateError.textContent = "";
+          tokenTemplateConfirm.disabled = false;
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          if (!current()) return;
+          tokenTemplateState.pendingUrl = null;
+          draft.loading = false;
+          tokenTemplateConfirm.disabled = !draft.image;
+          tokenTemplateError.textContent = "Não foi possível abrir esta imagem. Escolha outra.";
+        };
+        image.src = url;
+      }
+
+      function closeTokenTemplateEditor({ restoreFocus = true } = {}) {
+        const wasOpen = tokenTemplateEditor.open;
+        tokenTemplateState.loadVersion++;
+        if (tokenTemplateState.pendingUrl) URL.revokeObjectURL(tokenTemplateState.pendingUrl);
+        if (tokenTemplateState.draft?.image) URL.revokeObjectURL(tokenTemplateState.draft.image);
+        tokenTemplateState.pendingUrl = null;
+        tokenTemplateState.draft = null;
+        tokenTemplatePreview.removeAttribute("src");
+        tokenTemplatePicker.value = "";
+        if (wasOpen) tokenTemplateEditor.close();
+        if (wasOpen && restoreFocus && assetExplorer.open) explorerContent.querySelector(".asset-explorer__add")?.focus({ preventScroll: true });
+      }
+
+      function confirmTokenTemplate() {
+        const draft = tokenTemplateState.draft;
+        if (!draft?.image || draft.loading || !tokenTemplateEditor.open || !isMasterMode()) return false;
+        tokenTemplateSizeControl.commit();
+        const id = `custom-${nextTokenTypeId++}`;
+        const name = tokenTemplateName.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || "Token";
+        TOKEN_TYPES[id] = Object.freeze({ id, instancePrefix: id, name, image: draft.image, fileSize: draft.fileSize, gridSize: tokenTemplateSettings.size, maxLife: 10000, status: "Normal" });
+        explorerState.fileSizes.set(draft.image, Promise.resolve(draft.fileSize));
+        draft.image = ""; // A URL pertence agora ao catálogo e às instâncias do token.
+        closeTokenTemplateEditor();
+        explorerState.category = "tokens";
+        renderAssetExplorerContent();
+        renderTokenDock();
+        tokenDockStatus.textContent = `Tipo de token ${name} criado.`;
+        return true;
+      }
+
       function chooseTokenImage() {
         if (!isMasterMode() || !assetExplorer.open || explorerState.category !== "tokens") return;
         tokenImagePicker.value = "";
@@ -2515,7 +2650,7 @@
       function addAssetForCategory() {
         if (!isMasterMode() || !assetExplorer.open) return;
         if (explorerState.category === "scenes") { openSceneEditor(); return; }
-        if (explorerState.category === "tokens") { chooseTokenImage(); return; }
+        if (explorerState.category === "tokens") { openTokenTemplateEditor(); return; }
         tokenImagePicker.value = "";
         tokenImagePicker.accept = explorerState.category === "maps" ? "image/*" : "";
         tokenImagePicker.click();
@@ -2594,7 +2729,7 @@
 
       function loadScene(id) {
         const scene = scenes.find(item => item.id === id);
-        if (!isMasterMode() || state.isMoving || sceneEditor.open || !scene || id === activeSceneId) return false;
+        if (!isMasterMode() || state.isMoving || sceneEditor.open || tokenTemplateEditor.open || !scene || id === activeSceneId) return false;
         cancelWorkspaceGestures("troca de cena");
         clearTokenSelection();
         closeAllTokenStatus();
@@ -2864,6 +2999,7 @@
 
       function closeAssetExplorer({ restoreFocus = true } = {}) {
         const wasOpen = assetExplorer.open;
+        closeTokenTemplateEditor({ restoreFocus: false });
         finishExplorerGesture();
         if (wasOpen) assetExplorer.close();
         discardTokenImageSelection();
@@ -2907,6 +3043,7 @@
           setTokenDockOpen(false, { restoreFocus: false });
           setSceneDockOpen(false, { restoreFocus: false });
           closeSceneEditor({ restoreFocus: false });
+          closeTokenTemplateEditor({ restoreFocus: false });
           closeAssetExplorer({ restoreFocus: false });
           if (masterMenu.contains(document.activeElement)) masterModeCheckbox.focus({ preventScroll: true });
         }
@@ -3022,19 +3159,36 @@
         return { x: point.x, y: point.y };
       }
 
-      function markHighlightSegment(start, end) {
+      function createHighlightCell(col, row) {
         const cell = state.size, origin = getGridOrigin(cell);
-        for (const { col, row } of getHighlightCells(start, end, cell, origin)) {
-          const key = `${col},${row}`;
-          if (highlightCells.has(key)) continue;
-          const x = origin.x + col * cell, y = origin.y + row * cell;
-          if (x + cell <= 0 || y + cell <= 0 || x >= workspaceLayers.clientWidth || y >= workspaceLayers.clientHeight) continue;
-          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          rect.classList.add("grid-highlight-cell");
-          Object.entries({ x, y, width: cell, height: cell }).forEach(([name, value]) => rect.setAttribute(name, value));
-          highlightCellsLayer.append(rect);
-          highlightCells.set(key, rect);
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.classList.add("grid-highlight-cell");
+        Object.entries({ x: origin.x + col * cell, y: origin.y + row * cell, width: cell, height: cell }).forEach(([name, value]) => rect.setAttribute(name, value));
+        return rect;
+      }
+
+      function renderHighlightCells() {
+        const visible = new Map(highlightCells);
+        if (highlightSession) {
+          highlightSession.preview.forEach((rect, key) => {
+            if (highlightSession.erase) visible.delete(key);
+            else visible.set(key, rect);
+          });
         }
+        highlightCellsLayer.replaceChildren(...visible.values());
+      }
+
+      function markHighlightSegment(start, end) {
+        if (!highlightSession) return;
+        const cell = state.size, origin = getGridOrigin(cell);
+        const preview = new Map();
+        for (const { col, row } of getHighlightCells(start, end, cell, origin)) {
+          const key = `${col},${row}`, x = origin.x + col * cell, y = origin.y + row * cell;
+          if (x + cell <= 0 || y + cell <= 0 || x >= workspaceLayers.clientWidth || y >= workspaceLayers.clientHeight) continue;
+          preview.set(key, highlightCells.get(key) || highlightSession.preview.get(key) || createHighlightCell(col, row));
+        }
+        highlightSession.preview = preview;
+        renderHighlightCells();
       }
 
       function renderHighlightGuide() {
@@ -3045,9 +3199,14 @@
           .forEach(([name, value]) => highlightGuide.setAttribute(name, value));
       }
 
-      function finishHighlightStroke() {
+      function finishHighlightStroke(commit = false) {
         const session = highlightSession;
+        if (commit && session) session.preview.forEach((rect, key) => {
+          if (session.erase) highlightCells.delete(key);
+          else highlightCells.set(key, rect);
+        });
         highlightSession = null;
+        renderHighlightCells();
         highlightGuide.dataset.active = "false";
         if (session) releaseWorkspacePointer(session.pointerId);
       }
@@ -3078,7 +3237,9 @@
           if (highlightBlocked || highlightSession || !event.isPrimary || event.button !== 0) return;
           const point = highlightPointAtClient(event.clientX, event.clientY);
           if (!point) return;
-          highlightSession = { pointerId: event.pointerId, pointerType: event.pointerType, start: point, end: point };
+          const origin = getGridOrigin(state.size);
+          const key = `${Math.floor((point.x - origin.x) / state.size)},${Math.floor((point.y - origin.y) / state.size)}`;
+          highlightSession = { pointerId: event.pointerId, pointerType: event.pointerType, start: point, end: point, erase: highlightCells.has(key), preview: new Map() };
           try { workspaceCard.setPointerCapture(event.pointerId); } catch {}
           markHighlightSegment(point, point);
           return;
@@ -3091,15 +3252,12 @@
         if (!session || session.pointerId !== event.pointerId) return;
         if (event.type === "pointercancel" || (event.type === "pointermove" && event.pointerType === "mouse" && !(event.buttons & 1))) { finishHighlightStroke(); return; }
         if (!["pointermove", "pointerup"].includes(event.type)) return;
-        const samples = event.type === "pointermove" ? (event.getCoalescedEvents?.() || []) : [];
-        for (const sample of [...samples, event]) {
-          const point = highlightPointAtClient(sample.clientX, sample.clientY);
-          if (!point) { finishHighlightStroke(); return; }
-          markHighlightSegment(session.end, point);
-          session.end = point;
-        }
+        const point = highlightPointAtClient(event.clientX, event.clientY);
+        if (!point) { finishHighlightStroke(); return; }
+        markHighlightSegment(session.start, point);
+        session.end = point;
         renderHighlightGuide();
-        if (event.type === "pointerup") finishHighlightStroke();
+        if (event.type === "pointerup") finishHighlightStroke(true);
       }
 
       function getRulerDistance(start, end, unit) {
@@ -3237,6 +3395,12 @@
       masterTokenButton.addEventListener("click", () => setTokenDockOpen(!state.tokenDockOpen));
       masterScenesButton.addEventListener("click", () => setSceneDockOpen(!state.sceneDockOpen));
       renderTokenDock();
+      document.getElementById("token-template-choose").addEventListener("click", () => { tokenTemplatePicker.value = ""; tokenTemplatePicker.click(); });
+      tokenTemplatePicker.addEventListener("change", selectTokenTemplateImage);
+      ["token-template-close", "token-template-cancel"].forEach(id => document.getElementById(id).addEventListener("click", () => closeTokenTemplateEditor()));
+      tokenTemplateConfirm.addEventListener("click", confirmTokenTemplate);
+      tokenTemplateEditor.addEventListener("cancel", event => { event.preventDefault(); closeTokenTemplateEditor(); });
+      tokenTemplateEditor.addEventListener("keydown", event => event.stopPropagation());
       tokenImagePicker.addEventListener("change", discardTokenImageSelection);
       tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
       document.getElementById("scene-choose-background").addEventListener("click", () => { sceneBackgroundPicker.value = ""; sceneBackgroundPicker.click(); });
@@ -6285,6 +6449,7 @@
       setTouchMode(state.touchMode);
       setMasterMode(state.masterMode);
       initializeSceneControls();
+      initializeTokenTemplateControls();
       debugLog("system", "CombatMaps inicializado", { touchCapable, userAgent: navigator.userAgent });
       setVisible(state.visible);
       setAbsolute(state.absolute);

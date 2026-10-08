@@ -17,7 +17,7 @@ function sceneWorkspace(){
  const first=node('soldier-1',7000),second=node('soldier-2'),dead=node('soldier-3',0);
  const c=vm.createContext({Math,state:{masterMode:true,isMoving:false,size:48,distance:1.5,opacity:5,visible:true,absolute:false},
   activeSceneId:'a',tokens:[first,dead],scenes:[{id:'a',name:'A',grid:{size:48,distance:1.5,opacity:5,visible:true,absolute:false}},{id:'b',name:'B',grid:{size:64,distance:2,opacity:20,visible:false,absolute:true},workspaceTokens:[second]}],
-  sceneEditor:{open:false},movementHistory:[{kind:'health',token:first,before:8000,after:7000}],movementRedoHistory:[{kind:'movement',token:first}],appliedWorkspaceGeometry:'480x480@48',
+  sceneEditor:{open:false},tokenTemplateEditor:{open:false},movementHistory:[{kind:'health',token:first,before:8000,after:7000}],movementRedoHistory:[{kind:'movement',token:first}],appliedWorkspaceGeometry:'480x480@48',
   workspaceLayers:{clientWidth:480,clientHeight:480,append(t){t.attached=true}},isMasterMode(){return c.state.masterMode},getTokenGridState:t=>t.cell||{col:0,row:0,size:1},getTokenInfo:t=>t.info,cancelTokenDeath(t){t.dataset.dead='false';c.settled=(c.settled||0)+1},
   cancelWorkspaceGestures(){c.cancelled=true},clearTokenSelection(){c.selectionCleared=true},closeAllTokenStatus(){c.panelsClosed=true},clearAllGridPoints(){},clearGridHighlights(){},
   setVisible(v){c.state.visible=v},setAbsolute(v){c.state.absolute=v},distanceControl:{set(v){c.state.distance=v}},opacityControl:{set(v){c.state.opacity=v}},sizeControl:{set(v){c.state.size=v;c.appliedWorkspaceGeometry=`480x480@${v}`}},
