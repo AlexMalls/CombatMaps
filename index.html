@@ -713,6 +713,7 @@
       clip-path: inset(var(--token-life-remaining, 100%) 0 0);
       transition: clip-path var(--duration-normal) var(--ease-interface);
     }
+    html[data-show-token-damage="false"] .token__damage { visibility: hidden; }
     [data-type="token"]::before {
       content: attr(data-selection-number);
       position: absolute;
@@ -1217,7 +1218,7 @@
           <path d="m3 16 13-13 5 5L8 21Zm10-10 2 2m-5 1 2 2m-5 1 2 2m-5 1 2 2"/>
         </svg>
       </button>
-      <button class="ui-tool" type="button" data-tool="heart" aria-label="Coração — ferramenta visual" aria-pressed="false">
+      <button class="ui-tool" type="button" data-tool="heart" aria-label="Mostrar dano nos tokens" aria-pressed="true">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M12 21 3.4 12.6C-2 7.2 5.4.3 10.5 5.2L12 6.7l1.5-1.5C18.6.3 26 7.2 20.6 12.6Z"/>
         </svg>
@@ -1236,6 +1237,10 @@
     </button>
 
     <section id="app-settings-panel" class="ui-panel corner-settings__panel app-settings__panel" aria-label="Configurações" inert>
+      <label class="ui-check" for="master-mode">
+        <span>Modo mestre</span>
+        <input id="master-mode" type="checkbox" checked>
+      </label>
       <label class="ui-check" for="touch-mode">
         <span>Modo toque</span>
         <input id="touch-mode" type="checkbox">
@@ -1392,6 +1397,7 @@
         heart: { type: "visual" }
       });
       const touchModeCheckbox = document.getElementById("touch-mode");
+      const masterModeCheckbox = document.getElementById("master-mode");
       const debugEnabledCheckbox = document.getElementById("debug-enabled");
       const debugDialog = document.getElementById("debug-dialog");
       const debugOutput = document.getElementById("debug-output");
@@ -1828,7 +1834,8 @@
         appSettingsOpen: false,
         toolsOpen: false,
         activeTool: null,
-        visualTools: new Set(),
+        visualTools: new Set(["heart"]),
+        masterMode: true,
         touchMode: touchCapable,
         visible: true,
         absolute: false,
@@ -1845,6 +1852,18 @@
         cameraY: 0
       };
 
+      // Modo local de protótipo, sem autenticação. Recursos exclusivos futuros
+      // devem consultar isMasterMode() antes de exibir controles ou executar ações.
+      function isMasterMode() {
+        return state.masterMode;
+      }
+
+      function setMasterMode(enabled) {
+        state.masterMode = Boolean(enabled);
+        masterModeCheckbox.checked = state.masterMode;
+        document.documentElement.dataset.masterMode = String(state.masterMode);
+      }
+
       function hasPriorityTool() {
         return TOOL_DEFINITIONS[state.activeTool]?.type === "priority";
       }
@@ -1854,6 +1873,7 @@
         toolsTrigger.setAttribute("aria-expanded", String(state.toolsOpen));
         toolsPanel.inert = !state.toolsOpen;
         document.documentElement.dataset.priorityTool = hasPriorityTool() ? state.activeTool : "";
+        document.documentElement.dataset.showTokenDamage = String(state.visualTools.has("heart"));
         toolButtons.forEach(button => {
           const id = button.dataset.tool;
           const type = TOOL_DEFINITIONS[id].type;
@@ -4853,6 +4873,7 @@
         }
       });
       touchModeCheckbox.addEventListener("change", () => setTouchMode(touchModeCheckbox.checked));
+      masterModeCheckbox.addEventListener("change", () => setMasterMode(masterModeCheckbox.checked));
       debugEnabledCheckbox.addEventListener("change", () => setDebugEnabled(debugEnabledCheckbox.checked));
       movementHistoryUndoButton.addEventListener("click", () => undoLastMovement());
       tokenActionMove.addEventListener("click", () => executeMoveSelection());
@@ -4983,6 +5004,7 @@
 
       setDebugEnabled(true);
       setTouchMode(state.touchMode);
+      setMasterMode(state.masterMode);
       debugLog("system", "CombatMaps inicializado", { touchCapable, userAgent: navigator.userAgent });
       setVisible(state.visible);
       setAbsolute(state.absolute);

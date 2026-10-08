@@ -71,3 +71,25 @@ test('Escape from a corner control preserves map selection while a priority tool
   c.keydown({key:'Escape',target,preventDefault(){}});
   assert.equal(c.selectedToken.selected,true);assert.equal(c.state.activeTool,'ruler');
 });
+
+test('master mode and heart start enabled in the real default state',()=>{
+  const c=vm.createContext({touchCapable:false});
+  const start=script.indexOf('      const state = {');const stop=script.indexOf('      function hasPriorityTool()',start);
+  vm.runInContext(script.slice(start,stop),c);
+  assert.equal(vm.runInContext('state.masterMode',c),true);
+  assert.equal(vm.runInContext('state.visualTools.has("heart")',c),true);
+});
+test('master checkbox updates the shared mode flag for future exclusive features',()=>{
+  const c=setup();c.masterModeCheckbox={checked:true};
+  vm.runInContext(source('isMasterMode')+source('setMasterMode'),c);
+  vm.runInContext('setMasterMode(false)',c);assert.equal(c.masterModeCheckbox.checked,false);
+  assert.equal(c.document.documentElement.dataset.masterMode,'false');assert.equal(vm.runInContext('isMasterMode()',c),false);
+  vm.runInContext('setMasterMode(true)',c);assert.equal(c.masterModeCheckbox.checked,true);assert.equal(vm.runInContext('isMasterMode()',c),true);
+});
+test('heart switches only the shared damage visibility flag while keeping the active priority tool',()=>{
+  const c=setup();c.state.visualTools.add('heart');vm.runInContext('syncToolsUI()',c);
+  assert.equal(c.document.documentElement.dataset.showTokenDamage,'true');
+  vm.runInContext('toggleTool("ruler");toggleTool("heart")',c);
+  assert.equal(c.document.documentElement.dataset.showTokenDamage,'false');assert.equal(c.state.activeTool,'ruler');
+  vm.runInContext('toggleTool("heart")',c);assert.equal(c.document.documentElement.dataset.showTokenDamage,'true');
+});
