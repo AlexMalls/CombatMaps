@@ -1242,16 +1242,40 @@
     }
     .asset-explorer__editable { text-align: left; cursor: pointer; display: block; width: 100%; }
     .asset-explorer__editable:focus-visible { outline: 2px solid var(--color-accent); }
-    .scene-editor.image-editor[open] { width: min(1100px, calc(100vw - 24px)); height: min(850px, calc(100dvh - 24px)); grid-template-rows: auto auto minmax(100px, 1fr) auto auto auto; }
-    .image-editor__tools { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
+    .scene-editor.image-editor[open] { width: min(1320px, calc(100vw - 24px)); height: calc(100dvh - 24px); grid-template-rows: auto auto minmax(100px, 1fr) auto auto auto; }
+    .image-editor__body { display: grid; grid-template-columns: 5.25rem minmax(0, 1fr) 15rem; min-height: 0; overflow: hidden; }
+    .image-editor__tools { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2); border-bottom: 1px solid var(--color-border); }
     .image-editor__tools label { display: flex; align-items: center; gap: var(--space-2); }
-    .image-editor__tools [aria-pressed="true"] { background: var(--color-accent); color: var(--color-text-inverse); }
+    .image-editor__palette { display: flex; flex-direction: column; gap: var(--space-1); overflow: auto; padding: var(--space-2); background: var(--color-surface-inset); }
+    .image-editor__tool { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) 2px; width: 100%; }
+    .image-editor__tool svg { width: 22px; height: 22px; }
+    .image-editor__tool span { font-size: .6rem; }
+    .image-editor__palette [aria-pressed="true"] { background: var(--color-accent); color: var(--color-text-inverse); }
+    .image-editor__options { overflow: auto; padding: var(--space-3); background: var(--color-surface-raised); }
+    .image-editor__options section { display: grid; gap: var(--space-2); padding-bottom: var(--space-3); margin-bottom: var(--space-3); border-bottom: 1px solid var(--color-border); }
+    .image-editor__options h3 { margin: 0; font-size: .85rem; color: var(--color-accent); }
+    .image-editor__options label { display: grid; gap: 4px; font-size: .75rem; }
+    .image-editor__options .image-editor__checkbox { display: flex; align-items: center; }
+    .image-editor__options select { width: 100%; }
+    .image-editor__options button { font-size: .7rem; min-height: 2rem; }
+    .image-editor__action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); }
     .image-editor__viewport { overflow: auto; min-height: 0; padding: 16px; background: var(--color-surface-inset); overscroll-behavior: contain; }
     .image-editor__stage { position: relative; margin: auto; background: repeating-conic-gradient(var(--color-surface-raised) 0 25%, var(--color-surface-inset) 0 50%) 0 / 20px 20px; }
     .image-editor__stage canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+    .image-editor__stage[data-tool="pan"] canvas { cursor: grab; }
+    #image-editor-mask { position: absolute; inset: 0; pointer-events: none; }
     .image-editor__stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
     .image-editor__stage polygon { stroke: var(--color-accent); fill: var(--color-highlight-soft); stroke-dasharray: 5 3; }
+    .image-editor__loupe { position: fixed; width: 116px; height: 116px; border-radius: 50%; border: 2px solid var(--color-accent); box-shadow: 0 8px 28px rgb(0 0 0 / 45%); pointer-events: none; z-index: 2; background: repeating-conic-gradient(var(--color-surface-raised) 0 25%, var(--color-surface-inset) 0 50%) 0 / 12px 12px; }
     .image-editor__help { margin: 0; padding: 0 var(--space-3) var(--space-2); }
+    @media (max-width: 700px) {
+      .image-editor__body { grid-template-columns: 3rem minmax(0, 1fr); grid-template-rows: minmax(100px, 1fr) 9rem; }
+      .image-editor__palette { grid-row: 1 / 3; padding: 3px; }
+      .image-editor__tool span { display: none; }
+      .image-editor__options { grid-column: 2; display: flex; gap: var(--space-3); overflow: auto; }
+      .image-editor__options section { flex: 0 0 13rem; padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+      .image-editor__tools button { font-size: .65rem; min-height: 1.8rem; }
+    }
     .token-template__preview { display: block; width: 100%; max-height: 45vh; object-fit: contain; }
     .scene-editor[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
     .scene-editor__body { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; min-height: 0; overflow: auto; }
@@ -1629,20 +1653,42 @@
 
       <dialog id="token-image-editor" class="scene-editor image-editor" aria-labelledby="image-editor-title">
         <header class="asset-explorer__header"><h2 id="image-editor-title">Editar imagem</h2><button class="asset-explorer__close" data-image-action="close" type="button" aria-label="Fechar editor de imagem">×</button></header>
-        <div class="image-editor__tools" role="toolbar" aria-label="Ferramentas de imagem">
-          <button type="button" data-image-action="lasso" aria-pressed="true">Laço</button>
-          <button type="button" data-image-action="rectangle" aria-pressed="false">Retângulo</button>
-          <button type="button" data-image-action="pan" aria-pressed="false">Mover imagem</button>
-          <button type="button" data-image-action="left" aria-label="Girar 90 graus à esquerda">↶ 90°</button>
-          <button type="button" data-image-action="right" aria-label="Girar 90 graus à direita">↷ 90°</button>
-          <button type="button" data-image-action="crop">Recortar seleção</button>
-          <button type="button" data-image-action="delete">Apagar seleção</button>
-          <button type="button" data-image-action="undo">Desfazer</button>
-          <label>Zoom <input type="range" min="10" max="400" value="100" step="5" aria-label="Zoom da imagem"></label>
+        <div class="image-editor__tools" role="toolbar" aria-label="Ações da imagem">
+          <button type="button" data-image-action="undo" title="Ctrl+Z">↶ Desfazer</button><button type="button" data-image-action="redo" title="Ctrl+Shift+Z">↷ Refazer</button>
+          <button type="button" data-image-action="crop">Recortar</button><button type="button" data-image-action="delete">Apagar seleção</button>
+          <button type="button" data-image-action="fit">Ajustar à tela</button><button type="button" data-image-action="actual">100%</button>
+          <label>Zoom <input data-image-setting="zoom" type="range" min="10" max="400" value="100" step="5" aria-label="Zoom da imagem"><output data-image-readout="zoom">100</output></label>
         </div>
-        <div class="image-editor__viewport"><div class="image-editor__stage"><canvas id="image-editor-canvas" aria-label="Imagem: arraste para selecionar"></canvas><svg aria-hidden="true"><polygon/></svg></div></div>
-        <p class="scene-editor__filename image-editor__help">Laço: contorne a área que deseja manter e recorte. Retângulo: selecione uma área para recortar ou apagar. Edições são aplicadas como PNG estático.</p>
+        <div class="image-editor__body">
+          <nav class="image-editor__palette" role="toolbar" aria-label="Ferramentas">
+            <button type="button" class="image-editor__tool" data-image-action="pan" aria-label="Mover" title="Mover (V)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M6 9l-3 3 3 3M9 18l3 3 3-3M18 9l3 3-3 3"/></svg><span>Mover</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="rectangle" aria-label="Retângulo" title="Retângulo (M)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" stroke-dasharray="3 2"/></svg><span>Retângulo</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="ellipse" aria-label="Elipse" title="Elipse" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="7" stroke-dasharray="3 2"/></svg><span>Elipse</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="lasso" aria-label="Laço" title="Laço (L)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18c-8-1-6-13 4-13 12 0 11 12 2 13-7 1-9-3-5-5 3-1 4 4 1 8"/></svg><span>Laço</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="wand" aria-label="Varinha mágica" title="Varinha mágica (W)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 20 12-12M14 3v3M19 7h3M19 2l-2 2M8 6l-2-2M18 12l2 2"/></svg><span>Varinha mágica</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="brush" aria-label="Pincel" title="Pincel (B)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 14 9-11 3 3-11 9M9 14c-6-2-6 5-7 7 6 1 10-2 7-7Z"/></svg><span>Pincel</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="eraser" aria-label="Borracha" title="Borracha (E)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 14 11-11 7 7-11 11H8L3 16Zm4-4 7 7M10 21h11"/></svg><span>Borracha</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="bucket" aria-label="Preencher" title="Preencher (G)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 11 8-8 8 8-8 8Z M4 11h16M8 3l4 8M20 14c4 5 1 8-1 5Z"/></svg><span>Preencher</span></button>
+            <button type="button" class="image-editor__tool" data-image-action="eyedropper" aria-label="Conta-gotas" title="Conta-gotas (I)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 21 3-1 12-12-2-2L4 18Z M13 5l6 6M16 6l3-3 2 2-3 3"/></svg><span>Conta-gotas</span></button>
+          </nav>
+          <div class="image-editor__viewport"><div class="image-editor__stage"><canvas id="image-editor-canvas" aria-label="Imagem: use a ferramenta selecionada"></canvas><canvas id="image-editor-mask" aria-hidden="true"></canvas><svg aria-hidden="true"><polygon/></svg></div></div>
+          <aside class="image-editor__options" aria-label="Opções de edição">
+            <section><h3>Seleção</h3>
+              <label>Modo<select data-image-setting="selection-mode" data-default="replace"><option value="replace">Nova seleção</option><option value="add">Adicionar</option><option value="subtract">Subtrair</option><option value="intersect">Interseção</option></select></label>
+              <label>Tolerância da varinha<input data-image-setting="tolerance" type="range" min="0" max="100" value="24"><output data-image-readout="tolerance">24</output></label>
+              <label class="image-editor__checkbox"><input data-image-setting="contiguous" type="checkbox" checked>Áreas contíguas</label>
+              <div class="image-editor__action-grid"><button type="button" data-image-action="select-all">Tudo</button><button type="button" data-image-action="deselect">Limpar</button><button type="button" data-image-action="invert-selection">Inverter</button><button type="button" data-image-action="smooth">Suavizar</button><button type="button" data-image-action="expand">Expandir 1 px</button><button type="button" data-image-action="contract">Contrair 1 px</button></div>
+              <label>Suavidade das bordas<input data-image-setting="feather" type="range" min="1" max="30" value="2"><output data-image-readout="feather">2</output></label><button type="button" data-image-action="feather">Suavizar bordas</button>
+            </section>
+            <section><h3>Pintura</h3><label>Cor<input data-image-setting="color" type="color" value="#79dfb5"></label><label>Tamanho do pincel<input data-image-setting="brush-size" type="range" min="1" max="300" value="12"><output data-image-readout="brush-size">12</output></label><label>Opacidade<input data-image-setting="opacity" type="range" min="1" max="100" value="100"><output data-image-readout="opacity">100</output></label></section>
+            <section><h3>Transformar</h3><div class="image-editor__action-grid"><button type="button" data-image-action="left">↶ 90°</button><button type="button" data-image-action="right">↷ 90°</button><button type="button" data-image-action="flip-x">Espelhar ↔</button><button type="button" data-image-action="flip-y">Espelhar ↕</button></div></section>
+            <section><h3>Ajustes de cor</h3><label>Brilho<input data-image-setting="brightness" type="range" min="-100" max="100" value="0"><output data-image-readout="brightness">0</output></label><label>Contraste<input data-image-setting="contrast" type="range" min="-100" max="100" value="0"><output data-image-readout="contrast">0</output></label><label>Saturação<input data-image-setting="saturation" type="range" min="-100" max="100" value="0"><output data-image-readout="saturation">0</output></label><button type="button" data-image-action="adjust">Aplicar ajustes</button><div class="image-editor__action-grid"><button type="button" data-image-action="grayscale">Preto e branco</button><button type="button" data-image-action="invert-color">Negativo</button></div></section>
+            <button type="button" data-image-action="reset">Restaurar original</button>
+          </aside>
+        </div>
+        <p id="image-editor-info" class="scene-editor__filename image-editor__help"></p>
         <p class="scene-editor__error image-editor__help" role="status" aria-live="polite"></p>
+        <canvas id="image-editor-loupe" class="image-editor__loupe" width="116" height="116" aria-hidden="true" hidden></canvas>
         <footer class="scene-editor__footer"><button type="button" data-image-action="cancel">Cancelar</button><button type="button" class="ui-button--primary" data-image-action="apply">Aplicar imagem</button></footer>
       </dialog>
 
@@ -1716,6 +1762,7 @@
         </footer>
       </dialog>
 
+  <script src="token-image-tools.js"></script>
   <script src="token-image-editor.js"></script>
   <script>
     "use strict";
