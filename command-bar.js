@@ -147,7 +147,7 @@
       value=Boolean(value);
       if (value === open) { if (value) refresh(); return; }
       open=value;stopGesture();hovered=null;
-      bar.dataset.open=String(open);bar.inert=!open;bar.setAttribute('aria-hidden',String(!open));links.hidden=!open;
+      bar.dataset.open=String(open);bar.inert=!open;bar.setAttribute('aria-hidden',String(!open));if (open) links.removeAttribute('hidden'); else links.setAttribute('hidden','');
       if (open) { selection.add(transfer);refresh(); }
       else { selection.clear();clearDrawings();if(frame)cancelAnimationFrame(frame);frame=0; }
     }
