@@ -19,7 +19,7 @@
     if (kind === 'status' && !String(value || '').trim()) return [];
     return tokens.flatMap(token => {
       const info = getInfo(token);
-      if (!info || !token.isConnected) return [];
+      if (!info || info.life <= 0 || !token.isConnected) return [];
       const before = { life: info.life, status: info.status };
       const after = { life: kind === 'status' ? info.life : Math.min(info.maxLife, Math.max(0, info.life + (kind === 'damage' ? -amount : amount))), status: kind === 'status' ? String(value) : info.status };
       return before.life === after.life && before.status === after.status ? [] : [{ token, before, after }];
@@ -66,6 +66,7 @@
     }
     function refreshToken(token) {
       const row = rows.get(token), info = options.getInfo(token);
+      if (open && info && Boolean(row) !== Boolean(token.isConnected && info.life > 0)) { refresh(); return; }
       if (!row || !info) return;
       row.name.textContent = options.getName(token);
       row.life.textContent = `Vida: ${format.format(info.life)} / ${format.format(info.maxLife)}`;
@@ -86,7 +87,7 @@
     }
     function refresh() {
       if (!open) return;
-      const tokens = options.getTokens().filter(token => token.isConnected);
+      const tokens = options.getTokens().filter(token => token.isConnected && options.getInfo(token)?.life > 0);
       selection.reconcile(tokens);
       if (hovered && !tokens.includes(hovered)) hovered = null;
       rows.forEach((row,token) => { if (!tokens.includes(token)) { row.button.remove(); rows.delete(token); } });

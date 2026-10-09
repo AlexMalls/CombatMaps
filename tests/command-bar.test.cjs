@@ -17,8 +17,8 @@ test('links fade smoothly at viewport edges, disappear outside, and do not chang
 test('damage affects every selected token once and clamps independently at zero',()=>{
  const a=token(7000),b=token(1000),c=token(8000);const plan=CommandBar.planBatch([a,b,c],t=>t.info,'damage','5000');assert.deepEqual(plan.map(x=>x.after.life),[2000,0,3000]);assert.deepEqual(plan.map(x=>x.before.life),[7000,1000,8000]);assert.equal(a.info.life,7000);
 });
-test('healing respects each token maximum, including resurrection, and ignores unchanged records',()=>{
- const a=token(0),b=token(9000),c=token(3000,3000);const plan=CommandBar.planBatch([a,b,c],t=>t.info,'heal','5000');assert.deepEqual(plan.map(x=>x.after.life),[5000,10000]);assert.equal(plan.length,2);
+test('healing respects each token maximum and ignores dead or unchanged records',()=>{
+ const a=token(0),b=token(9000),c=token(3000,3000);const plan=CommandBar.planBatch([a,b,c],t=>t.info,'heal','5000');assert.deepEqual(plan.map(x=>x.after.life),[10000]);assert.equal(plan.length,1);
 });
 test('invalid amounts cannot corrupt health or create a history entry',()=>{
  const a=token();for(const value of ['','abc',NaN,Infinity,-100,0,1.5])assert.equal(CommandBar.planBatch([a],t=>t.info,'damage',value).length,0);assert.equal(CommandBar.planBatch([a],t=>t.info,'unknown',100).length,0);
@@ -45,4 +45,8 @@ test('opening command bar transfers floating cards; closing never recreates them
 });
 test('holding map tokens redirects consultation into the command bar without floating cards',()=>{
  const a=token(),b=token();let targets,focus,cleared=0,floating=0;const c=vm.createContext({getSelectedTokensInNumberOrder:()=>[a,b],openTokenStatus(){floating++},clearTokenSelection(){cleared++},commandBar:{isOpen:()=>true,inspect(items,token){targets=items;focus=token}}});vm.runInContext(source('openStatusForToken'),c);c.openStatusForToken(b);assert.deepEqual([...targets],[a,b]);assert.equal(focus,b);assert.equal(cleared,1);assert.equal(floating,0);
+});
+
+test('dead tokens reject all command actions even with stale selection',()=>{
+ const dead=token(0);for(const kind of ['damage','heal','status'])assert.equal(CommandBar.planBatch([dead],t=>t.info,kind,kind==='status'?'Normal':'1000').length,0);assert.equal(dead.info.life,0);
 });
