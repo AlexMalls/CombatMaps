@@ -567,6 +567,13 @@
     /* Medição: camada de tela independente da câmera e dos objetos do mapa. */
     .grid-highlight-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 6; overflow: hidden; pointer-events: none; }
     .grid-highlight-cell { fill: var(--color-highlight-soft); stroke: url(#grid-highlight-spectrum); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+    .grid-highlight-value[data-active="false"] { visibility: hidden; }
+    .grid-highlight-value { fill: var(--color-highlight); font: 600 15px var(--font-interface); paint-order: stroke; stroke: var(--color-explorer-shadow); stroke-width: 4px; stroke-linejoin: round; }
+    .highlight-tool__badge { position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; pointer-events: none; background: var(--color-popup); border-radius: 2px; }
+    .ui-tool .highlight-tool__badge svg { width: 10px; height: 10px; }
+    .highlight-shapes { position: absolute; right: calc(100% + 8px); top: 3.2rem; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-popup); box-shadow: var(--shadow-control); }
+    .highlight-shapes .ui-tool { width: 2rem; height: 2rem; }
+    .highlight-shapes .ui-tool[aria-pressed="true"] { background: var(--color-highlight-soft); }
     .grid-highlight-guide { stroke: var(--color-accent); stroke-width: 1px; stroke-dasharray: 5 4; opacity: 0.4; vector-effect: non-scaling-stroke; visibility: hidden; }
     .grid-highlight-guide[data-active="true"] { visibility: visible; }
     @media (forced-colors: active) { .grid-highlight-cell, .grid-highlight-guide { stroke: Highlight; } }
@@ -1198,6 +1205,7 @@
       user-select: none;
     }
     .asset-explorer__header h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+    .asset-explorer__close svg, .asset-explorer__add svg { display: block; width: 1.15rem; height: 1.15rem; pointer-events: none; }
     .asset-explorer__close { width: 2.25rem; min-height: 2.25rem; padding: 0; font-size: 1.35rem; }
     .asset-explorer__body { min-height: 0; display: grid; grid-template-columns: clamp(6.5rem, 22%, 10rem) minmax(0, 1fr); }
     .asset-explorer__nav { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); overflow-y: auto; background: linear-gradient(180deg, rgb(7 80 75 / 65%), var(--color-explorer-shadow)); }
@@ -1296,6 +1304,8 @@
     .scene-editor .asset-explorer__header { cursor: default; touch-action: auto; }
     .scene-editor__preview-pane { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 18rem; padding: var(--space-4); background: var(--color-explorer-shadow); }
     .scene-preview { position: relative; width: 100%; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-background); touch-action: none; }
+    .scene-preview__grid { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+    .scene-preview__grid[data-visible="true"] { opacity: var(--grid-opacity); }
     .scene-preview__stage { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; }
     .scene-preview__image-box { position: absolute; cursor: move; touch-action: none; }
     .scene-preview__image { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; user-select: none; }
@@ -1393,7 +1403,7 @@
             <stop offset="0%"/><stop offset="33%"/><stop offset="67%"/><stop offset="100%"/>
           </linearGradient></defs>
           <g id="grid-highlight-cells"></g>
-          <line id="grid-highlight-guide" class="grid-highlight-guide" data-active="false"/>
+          <line id="grid-highlight-guide" class="grid-highlight-guide" data-active="false"/><text id="grid-highlight-value" class="grid-highlight-value" text-anchor="middle" dominant-baseline="middle" data-active="false"></text>
         </svg>
         <article id="token-soldados-01" class="token" data-type="token" data-token-id="soldados-01" data-token-type="soldiers"
           data-grid-col="0" data-grid-row="0" data-grid-size="1" data-selected="false"
@@ -1457,11 +1467,16 @@
           <path d="m3 16 13-13 5 5L8 21Zm10-10 2 2m-5 1 2 2m-5 1 2 2m-5 1 2 2"/>
         </svg>
       </button>
-      <button class="ui-tool" type="button" data-tool="highlight" aria-label="Destacar quadrados — ferramenta de prioridade" aria-pressed="false">
+      <button class="ui-tool" type="button" data-tool="highlight" aria-haspopup="true" aria-controls="highlight-shapes" aria-expanded="false" aria-label="Destacar quadrados — ferramenta de prioridade" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m10 14 7-10 4 4-10 7-3 3-3-3Z M3 21h8 M9 12l4 4"/>
         </svg>
-      </button>
+      <span id="highlight-shape-badge" class="highlight-tool__badge" hidden></span></button>
+      <div id="highlight-shapes" class="highlight-shapes" role="toolbar" aria-label="Formas de área" hidden><button class="ui-tool" type="button" data-highlight-shape="line" aria-label="Linha" title="Linha (se já selecionado, voltar ao traço livre)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19 20 5"/></svg></button>
+        <button class="ui-tool" type="button" data-highlight-shape="circle" aria-label="Círculo" title="Círculo (se já selecionado, voltar ao traço livre)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg></button>
+        <button class="ui-tool" type="button" data-highlight-shape="square" aria-label="Quadrado" title="Quadrado (se já selecionado, voltar ao traço livre)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="1"/></svg></button>
+        <button class="ui-tool" type="button" data-highlight-shape="cone" aria-label="Cone" title="Cone (se já selecionado, voltar ao traço livre)" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 20 4-16 12 12Z"/></svg></button>
+      </div>
       <button class="ui-tool" type="button" data-tool="heart" aria-label="Mostrar dano nos tokens" aria-pressed="true">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M12 21 3.4 12.6C-2 7.2 5.4.3 10.5 5.2L12 6.7l1.5-1.5C18.6.3 26 7.2 20.6 12.6Z"/>
@@ -1646,7 +1661,7 @@
       <dialog id="asset-explorer" class="asset-explorer" aria-labelledby="asset-explorer-title">
         <header id="asset-explorer-header" class="asset-explorer__header">
           <h2 id="asset-explorer-title">Arquivos do mapa</h2>
-          <button id="asset-explorer-close" class="asset-explorer__close" type="button" aria-label="Fechar arquivos">×</button>
+          <button id="asset-explorer-close" class="asset-explorer__close" type="button" aria-label="Fechar arquivos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
         </header>
         <input id="token-image-picker" type="file" accept="image/*" hidden aria-label="Selecionar imagem de token">
         <span id="token-image-picker-help" class="sr-only">A importação estará disponível futuramente. Selecionar um arquivo ainda não salva nem adiciona tokens.</span>
@@ -1666,7 +1681,7 @@
       </dialog>
 
       <dialog id="token-image-editor" class="scene-editor image-editor" aria-labelledby="image-editor-title">
-        <header class="asset-explorer__header"><h2 id="image-editor-title">Editar imagem</h2><button class="asset-explorer__close" data-image-action="close" type="button" aria-label="Fechar editor de imagem">×</button></header>
+        <header class="asset-explorer__header"><h2 id="image-editor-title">Editar imagem</h2><button class="asset-explorer__close" data-image-action="close" type="button" aria-label="Fechar editor de imagem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></header>
         <div class="image-editor__tools" role="toolbar" aria-label="Ações da imagem">
           <button type="button" data-image-action="undo" title="Ctrl+Z">↶ Desfazer</button><button type="button" data-image-action="redo" title="Ctrl+Shift+Z">↷ Refazer</button>
           <button type="button" data-image-action="crop">Recortar</button><button type="button" data-image-action="delete">Apagar seleção</button>
@@ -1701,7 +1716,7 @@
       </dialog>
 
       <dialog id="image-filters" class="scene-editor image-filters" aria-labelledby="image-filters-title">
-        <header class="asset-explorer__header"><h2 id="image-filters-title">Filtros</h2><button class="asset-explorer__close" type="button" data-filter-close aria-label="Fechar filtros">×</button></header>
+        <header class="asset-explorer__header"><h2 id="image-filters-title">Filtros</h2><button class="asset-explorer__close" type="button" data-filter-close aria-label="Fechar filtros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></header>
         <div class="scene-editor__settings">
           <p class="scene-editor__filename">Se houver seleção, o filtro atua apenas nela.</p><canvas id="image-filter-preview" style="display:block;width:100%;max-height:180px;object-fit:contain;background:var(--color-background);border-radius:var(--radius-md)" aria-label="Prévia do filtro"></canvas>
           <label>Filtro<select data-filter-setting="preset" data-default="none"><option value="none">Ajustes básicos</option><option value="grayscale">Preto e branco</option><option value="pixelate">Mosaico / pixelização</option></select></label>
@@ -1716,7 +1731,7 @@
       <dialog id="token-template-editor" class="scene-editor token-template-editor" aria-labelledby="token-template-title">
         <header class="asset-explorer__header">
           <h2 id="token-template-title">Novo token</h2>
-          <button id="token-template-close" class="asset-explorer__close" type="button" aria-label="Fechar novo token">×</button>
+          <button id="token-template-close" class="asset-explorer__close" type="button" aria-label="Fechar novo token"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
         </header>
         <div class="scene-editor__body">
           <section class="scene-editor__preview-pane" aria-label="Prévia do token">
@@ -1750,7 +1765,7 @@
       </dialog>
 
       <dialog id="status-editor" class="scene-editor" aria-labelledby="status-editor-title">
-        <header class="asset-explorer__header"><h2 id="status-editor-title">Novo status</h2><button class="asset-explorer__close" type="button" data-status-close aria-label="Fechar">×</button></header>
+        <header class="asset-explorer__header"><h2 id="status-editor-title">Novo status</h2><button class="asset-explorer__close" type="button" data-status-close aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></header>
         <div class="scene-editor__settings"><label for="status-name">Nome</label><input id="status-name" type="text" maxlength="80"><label for="status-description">Descrição</label><textarea id="status-description" maxlength="2000" rows="4"></textarea></div>
         <footer class="scene-editor__footer"><button type="button" data-status-close>Cancelar</button><button id="status-confirm" class="ui-button--primary" type="button">Salvar</button></footer>
       </dialog>
@@ -1758,7 +1773,7 @@
       <dialog id="scene-editor" class="scene-editor" aria-labelledby="scene-editor-title">
         <header class="asset-explorer__header">
           <h2 id="scene-editor-title">Nova cena</h2>
-          <button id="scene-editor-close" class="asset-explorer__close" type="button" aria-label="Fechar nova cena">×</button>
+          <button id="scene-editor-close" class="asset-explorer__close" type="button" aria-label="Fechar nova cena"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
         </header>
         <div class="scene-editor__body">
           <section class="scene-editor__preview-pane" aria-label="Prévia da cena">
@@ -1769,7 +1784,7 @@
                   <img id="scene-background" class="scene-preview__image" alt="Background da nova cena" draggable="false">
                   <button id="scene-image-resize" class="scene-preview__resize" type="button" aria-label="Redimensionar background pelo canto inferior direito"></button>
                 </div>
-                <div id="scene-preview-grid" class="workspace-grid" data-visible="true" aria-hidden="true"></div>
+                <svg id="scene-preview-grid" class="scene-preview__grid" data-visible="true" aria-hidden="true"><defs><pattern id="scene-preview-pattern" patternUnits="userSpaceOnUse"><path fill="none" stroke="var(--color-grid)"/></pattern></defs><rect width="100%" height="100%" fill="url(#scene-preview-pattern)"/></svg>
               </div>
             </div>
           </section>
@@ -1789,6 +1804,7 @@
         </footer>
       </dialog>
 
+  <script src="grid-area-tools.js"></script>
   <script src="token-image-tools.js"></script>
   <script src="token-image-editor.js"></script>
   <script>
@@ -1888,6 +1904,12 @@
       const highlightTouches = new Set();
       let highlightSession = null;
       let highlightBlocked = false;
+      const highlightValue = document.getElementById("grid-highlight-value");
+      const highlightToolButton = toolButtons.find(button => button.dataset.tool === "highlight");
+      const highlightShapesMenu = document.getElementById("highlight-shapes");
+      const highlightShapeBadge = document.getElementById("highlight-shape-badge");
+      const highlightShapeButtons = [...highlightShapesMenu.querySelectorAll("[data-highlight-shape]")];
+      let highlightToolPress = null, suppressHighlightToolClick = false;
       // Registro único: prioridade é exclusiva; visual é um toggle independente.
       // Futuras ferramentas devem declarar sua classificação aqui.
       const TOOL_DEFINITIONS = Object.freeze({
@@ -2341,6 +2363,7 @@
         open: false,
         appSettingsOpen: false,
         toolsOpen: false,
+        highlightShape: "path",
         activeTool: null,
         visualTools: new Set(["heart"]),
         masterMode: true,
@@ -2616,7 +2639,10 @@
           const add = document.createElement("button");
           add.type = "button";
           add.className = "ui-button--primary asset-explorer__add";
-          add.textContent = "+";
+          const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true");
+          const plus = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          plus.setAttribute("d", "M12 5v14M5 12h14"); plus.setAttribute("fill", "none"); plus.setAttribute("stroke", "currentColor"); plus.setAttribute("stroke-width", "2"); plus.setAttribute("stroke-linecap", "round"); icon.append(plus); add.append(icon);
           add.setAttribute("aria-label", explorerState.category === "scenes" ? "Nova cena" : `Adicionar em ${labels[explorerState.category]}`);
           if (!["scenes", "tokens"].includes(explorerState.category)) add.setAttribute("aria-describedby", "token-image-picker-help");
           add.addEventListener("click", addAssetForCategory);
@@ -2989,7 +3015,12 @@
         Object.assign(scenePreviewStage.style, { width: `${draft.canvas.width}px`, height: `${draft.canvas.height}px`, left: `${(width - draft.canvas.width * scale) / 2}px`, transform: `scale(${scale})` });
         scenePreviewStage.style.setProperty("--scene-preview-scale", String(scale));
         scenePreviewGrid.dataset.visible = String(sceneGridSettings.visible);
-        scenePreviewGrid.style.setProperty("--grid-spacing", `${sceneGridSettings.size}px`);
+        const cell = sceneGridSettings.size, pattern = scenePreviewGrid.querySelector("pattern"), path = pattern.querySelector("path");
+        scenePreviewGrid.setAttribute("viewBox", `0 0 ${draft.canvas.width} ${draft.canvas.height}`);
+        Object.entries({ width: cell, height: cell, x: (draft.canvas.width - cell) / 2, y: (draft.canvas.height - cell) / 2 }).forEach(([key, value]) => pattern.setAttribute(key, String(value)));
+        path.setAttribute("d", `M ${cell} 0 H 0 V ${cell}`);
+        // Uma linha de 1px na tela, inclusive quando a prévia é reduzida.
+        path.setAttribute("stroke-width", String(1 / Math.max(scale, .001)));
         scenePreviewGrid.style.setProperty("--grid-opacity", String(sceneGridSettings.opacity / 100));
         scenePreviewUniverse.hidden = Boolean(draft.backgroundUrl);
         sceneImageBox.hidden = !draft.backgroundUrl;
@@ -3323,6 +3354,7 @@
 
       function setToolsOpen(open) {
         state.toolsOpen = Boolean(open);
+        if (!state.toolsOpen) { cancelHighlightToolPress(); setHighlightShapesOpen(false); }
         if (!state.toolsOpen && toolsPanel.contains(document.activeElement)) {
           toolsTrigger.focus({ preventScroll: true });
         }
@@ -3337,7 +3369,7 @@
           else state.visualTools.add(id);
         } else {
           if (state.isMoving) return false;
-          if (state.activeTool === "highlight") clearGridHighlights();
+          if (state.activeTool === "highlight") { clearGridHighlights(); setHighlightShapesOpen(false); }
           cancelWorkspaceGestures("ferramenta exclusiva alterada");
           state.activeTool = state.activeTool === id ? null : id;
         }
@@ -3369,25 +3401,48 @@
         dispatchHighlightInput(event);
       }
 
+      function setHighlightShapesOpen(open) {
+        highlightShapesMenu.hidden = !open;
+        highlightToolButton.setAttribute("aria-expanded", String(Boolean(open)));
+      }
+
+      function selectHighlightShape(shape) {
+        if (state.isMoving || !["line", "circle", "square", "cone"].includes(shape)) return;
+        finishHighlightStroke();
+        state.highlightShape = state.highlightShape === shape ? "path" : shape;
+        if (state.activeTool !== "highlight") toggleTool("highlight");
+        highlightShapeButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.highlightShape === state.highlightShape)));
+        highlightShapeBadge.replaceChildren();
+        const selected = highlightShapeButtons.find(button => button.dataset.highlightShape === state.highlightShape);
+        highlightShapeBadge.hidden = !selected;
+        if (selected) highlightShapeBadge.append(selected.querySelector("svg").cloneNode(true));
+        highlightToolButton.setAttribute("aria-label", `Destacar quadrados — ${selected ? selected.getAttribute("aria-label") : "Traço livre"}. Segure para escolher uma forma.`);
+        setHighlightShapesOpen(false);
+        highlightToolButton.focus({ preventScroll: true });
+      }
+
+      function cancelHighlightToolPress() {
+        if (highlightToolPress) window.clearTimeout(highlightToolPress.timer);
+        highlightToolPress = null;
+      }
+
+      function beginHighlightToolPress(event) {
+        if (!event.isPrimary || event.button !== 0 || state.isMoving) return;
+        cancelHighlightToolPress(); suppressHighlightToolClick = false;
+        const press = { id: event.pointerId, x: event.clientX, y: event.clientY, timer: 0 };
+        highlightToolPress = press;
+        press.timer = window.setTimeout(() => {
+          if (highlightToolPress !== press) return;
+          suppressHighlightToolClick = true;
+          if (state.activeTool !== "highlight") toggleTool("highlight");
+          setHighlightShapesOpen(true);
+        }, 500);
+        try { highlightToolButton.setPointerCapture(event.pointerId); } catch {}
+      }
+
       function getHighlightCells(start, end, cell, origin) {
-        const x = (start.x - origin.x) / cell, y = (start.y - origin.y) / cell;
-        const ex = (end.x - origin.x) / cell, ey = (end.y - origin.y) / cell;
-        let col = Math.floor(x), row = Math.floor(y);
-        const endCol = Math.floor(ex), endRow = Math.floor(ey), dx = ex - x, dy = ey - y;
-        const sx = Math.sign(dx), sy = Math.sign(dy);
-        const txStep = sx ? 1 / Math.abs(dx) : Infinity, tyStep = sy ? 1 / Math.abs(dy) : Infinity;
-        let tx = sx ? ((sx > 0 ? col + 1 : col) - x) / dx : Infinity;
-        let ty = sy ? ((sy > 0 ? row + 1 : row) - y) / dy : Infinity;
-        const cells = [{ col, row }], limit = Math.abs(endCol - col) + Math.abs(endRow - row) + 1;
-        for (let step = 0; step < limit && (col !== endCol || row !== endRow); step += 1) {
-          // No canto final, usar a célula do endpoint sem avançar além do segmento.
-          if (Math.min(tx, ty) >= 1 - 1e-10) { cells.push({ col: endCol, row: endRow }); break; }
-          if (Math.abs(tx - ty) < 1e-10) { col += sx; row += sy; tx += txStep; ty += tyStep; }
-          else if (tx < ty) { col += sx; tx += txStep; }
-          else { row += sy; ty += tyStep; }
-          cells.push({ col, row });
-        }
-        return cells;
+        const at = point => ({ col: Math.floor((point.x - origin.x) / cell), row: Math.floor((point.y - origin.y) / cell) });
+        return GridAreaTools.path(at(start), at(end));
       }
 
       function highlightPointAtClient(clientX, clientY) {
@@ -3419,7 +3474,11 @@
         if (!highlightSession) return;
         const cell = state.size, origin = getGridOrigin(cell);
         const preview = new Map();
-        for (const { col, row } of getHighlightCells(start, end, cell, origin)) {
+        const at = point => ({ col: Math.floor((point.x - origin.x) / cell), row: Math.floor((point.y - origin.y) / cell) });
+        const bounds = { minCol: Math.ceil(-origin.x / cell), maxCol: Math.floor((workspaceLayers.clientWidth - origin.x) / cell) - 1, minRow: Math.ceil(-origin.y / cell), maxRow: Math.floor((workspaceLayers.clientHeight - origin.y) / cell) - 1 };
+        const area = GridAreaTools.area(state.highlightShape || "path", at(start), at(end), bounds);
+        highlightSession.steps = area.steps;
+        for (const { col, row } of area.cells) {
           const key = `${col},${row}`, x = origin.x + col * cell, y = origin.y + row * cell;
           if (x + cell <= 0 || y + cell <= 0 || x >= workspaceLayers.clientWidth || y >= workspaceLayers.clientHeight) continue;
           preview.set(key, highlightCells.get(key) || highlightSession.preview.get(key) || createHighlightCell(col, row));
@@ -3431,7 +3490,19 @@
       function renderHighlightGuide() {
         const session = highlightSession;
         highlightGuide.dataset.active = String(Boolean(session && Math.hypot(session.end.x - session.start.x, session.end.y - session.start.y) > 3 / state.cameraZoom));
+        highlightValue.hidden = !session || !session.preview.size || !session.steps || (state.highlightShape || "path") === "path";
+        highlightValue.dataset.active = String(!highlightValue.hidden);
         if (!session) return;
+        if (!highlightValue.hidden) {
+          const cells = [...session.preview.keys()].map(key => key.split(",").map(Number));
+          const origin = getGridOrigin(state.size);
+          const box = cells.reduce((b, [col, row]) => ({ left: Math.min(b.left, col), right: Math.max(b.right, col), top: Math.min(b.top, row), bottom: Math.max(b.bottom, row) }), { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity });
+          highlightValue.setAttribute("x", String(origin.x + (box.left + box.right + 1) * state.size / 2));
+          highlightValue.setAttribute("y", String(origin.y + (box.top + box.bottom + 1) * state.size / 2));
+          highlightValue.style.fontSize = `${15 / state.cameraZoom}px`;
+          highlightValue.textContent = rulerNumberFormat.format(session.steps * state.distance);
+          highlightValue.setAttribute("aria-label", `${state.highlightShape === "circle" ? "Raio" : state.highlightShape === "square" ? "Lado" : "Comprimento"}: ${highlightValue.textContent}`);
+        }
         Object.entries({ x1: session.start.x, y1: session.start.y, x2: session.end.x, y2: session.end.y })
           .forEach(([name, value]) => highlightGuide.setAttribute(name, value));
       }
@@ -3445,6 +3516,7 @@
         highlightSession = null;
         renderHighlightCells();
         highlightGuide.dataset.active = "false";
+        highlightValue.hidden = true; highlightValue.dataset.active = "false";
         if (session) releaseWorkspacePointer(session.pointerId);
       }
 
@@ -3476,7 +3548,7 @@
           if (!point) return;
           const origin = getGridOrigin(state.size);
           const key = `${Math.floor((point.x - origin.x) / state.size)},${Math.floor((point.y - origin.y) / state.size)}`;
-          highlightSession = { pointerId: event.pointerId, pointerType: event.pointerType, start: point, end: point, erase: highlightCells.has(key), preview: new Map() };
+          highlightSession = { pointerId: event.pointerId, pointerType: event.pointerType, start: point, end: point, erase: (state.highlightShape || "path") === "path" && highlightCells.has(key), preview: new Map() };
           try { workspaceCard.setPointerCapture(event.pointerId); } catch {}
           markHighlightSegment(point, point);
           return;
@@ -3655,6 +3727,21 @@
         "contextmenu", "wheel", "keydown"].forEach(type => {
         document.addEventListener(type, interceptWorkspaceInput, { capture: true, passive: false });
       });
+      highlightToolButton.addEventListener("pointerdown", beginHighlightToolPress);
+      highlightToolButton.addEventListener("pointermove", event => {
+        if (highlightToolPress?.id === event.pointerId && Math.hypot(event.clientX - highlightToolPress.x, event.clientY - highlightToolPress.y) > 8) cancelHighlightToolPress();
+      });
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach(type => highlightToolButton.addEventListener(type, cancelHighlightToolPress));
+      highlightToolButton.addEventListener("keydown", event => {
+        if (event.key === "ArrowLeft" && !state.isMoving) { event.preventDefault(); setHighlightShapesOpen(true); highlightShapeButtons[0].focus(); }
+      });
+      highlightShapeButtons.forEach(button => button.addEventListener("click", () => selectHighlightShape(button.dataset.highlightShape)));
+      highlightShapesMenu.addEventListener("keydown", event => {
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setHighlightShapesOpen(false); highlightToolButton.focus(); }
+      });
+      document.addEventListener("pointerdown", event => {
+        if (!highlightShapesMenu.hidden && !highlightShapesMenu.contains(event.target) && !highlightToolButton.contains(event.target)) setHighlightShapesOpen(false);
+      }, true);
       toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
       masterFilesButton.addEventListener("click", openAssetExplorer);
@@ -3721,7 +3808,10 @@
         if (assetExplorer.open) applyExplorerBounds(explorerState.bounds);
       });
       toolButtons.forEach(button => {
-        button.addEventListener("click", () => toggleTool(button.dataset.tool));
+        button.addEventListener("click", () => {
+          if (button === highlightToolButton && suppressHighlightToolClick) { suppressHighlightToolClick = false; return; }
+          toggleTool(button.dataset.tool);
+        });
       });
       syncToolsUI();
 
@@ -4563,7 +4653,11 @@
 
       function canExecuteMoveSelection() {
         const selectedTokens = getSelectedTokensInNumberOrder();
-        return selectedTokens.length > 0 && gridPointMarkers.length === selectedTokens.length;
+        if (!selectedTokens.length || gridPointMarkers.length !== selectedTokens.length) return false;
+        const selectedSet = new Set(selectedTokens);
+        return gridPointMarkers.every((marker, index) => tokenFits(marker.col, marker.row, marker.size) &&
+          !footprintOverlapsUnselectedToken(marker, selectedSet) &&
+          !gridPointMarkers.slice(0, index).some(other => gridFootprintsOverlap(marker, other)));
       }
 
       function syncTokenActionMenu() {
@@ -4713,7 +4807,7 @@
 
         // Nenhuma célula do footprint pode coincidir com um destino anterior.
         // Isso cobre tanto 1x1 quanto tokens 2x2, 3x3 etc.
-        if (gridPointMarkers.some(marker => gridFootprintsOverlap(candidate, marker))) {
+        if (gridPointMarkers.some(marker => gridFootprintsOverlap(candidate, marker)) || footprintOverlapsUnselectedToken(candidate, new Set(selectedTokens))) {
           debugLog("grid", "destino rejeitado por sobreposição", { number: markerIndex + 1, col, row, size: tokenSize });
           showInvalidGridPoint(col, row, tokenSize, markerIndex + 1);
           return null;
@@ -6765,6 +6859,7 @@
           window.addEventListener("pagehide", event => { if (!event.persisted) lifecycle.abort(); }, { once: true });
         } catch { /* Integração opcional; controles nativos seguem funcionais. */ }
       }
+      window.addEventListener("blur", () => { cancelHighlightToolPress(); setHighlightShapesOpen(false); });
     })();
   </script>
 </body>

@@ -104,3 +104,6 @@ test('priority blocks mouse and touch token drags and points to the active tool'
 test('priority-disabled dock items remain event targets but master and movement still disable them',()=>{
  const button={setAttribute(k,v){this[k]=v}},c=context({tokenDockList:{querySelectorAll:()=>[button]}});vm.runInContext(source('syncTokenDockAvailability'),c);c.hasPriorityTool=()=>true;c.syncTokenDockAvailability();assert.equal(button.disabled,false);assert.equal(button['aria-disabled'],'true');c.hasPriorityTool=()=>false;c.syncTokenDockAvailability();assert.equal(button['aria-disabled'],'false');c.state.isMoving=true;c.syncTokenDockAvailability();assert.equal(button.disabled,true);
 });
+test('2x2 template drops reject overlap even when only their far corner touches a soldier',()=>{
+ const c=context();c.TOKEN_TYPES.giant={gridSize:2};c.tokens=[{grid:{col:4,row:4,size:1},info:{life:10000}}];assert.equal(c.getTokenDropCell('giant',3*48+1,3*48+1),null);assert.ok(c.getTokenDropCell('giant',2*48+1,2*48+1));
+});

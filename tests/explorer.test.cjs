@@ -73,7 +73,7 @@ test('catalog lists loaded types once even with many map tokens, using template 
  const node=()=>({children:[],dataset:{},addEventListener(){},append(...children){this.children.push(...children)},replaceChildren(...children){this.children=children},setAttribute(k,v){this[k]=v}});
  const content=node(),buttons=['tokens','maps','scenes','status'].map(id=>({...node(),dataset:{assetCategory:id}}));
  const types={soldiers:{id:'soldiers',name:'Soldados',image:'token.png',gridSize:1,maxLife:10000},giant:{id:'giant',name:'Gigante',image:'giant.gif',gridSize:3,maxLife:20000}};
- const c=setup({document:{createElement:node},explorerContent:content,explorerCategories:buttons,explorerState:{category:'tokens',fileSizes:new Map()},TOKEN_TYPES:types,tokens:Array(7).fill({life:0}),tokenLifeFormat:new Intl.NumberFormat('pt-BR'),fetch:async()=>({ok:true,headers:{get:()=> '2500000'}})});
+ const c=setup({document:{createElement:node,createElementNS:()=>node()},explorerContent:content,explorerCategories:buttons,explorerState:{category:'tokens',fileSizes:new Map()},TOKEN_TYPES:types,tokens:Array(7).fill({life:0}),tokenLifeFormat:new Intl.NumberFormat('pt-BR'),fetch:async()=>({ok:true,headers:{get:()=> '2500000'}})});
  vm.runInContext(source('addAssetForCategory')+source('renderAssetExplorerContent'),c);c.renderAssetExplorerContent();
  const list=content.children[1];assert.equal(list.children.length,2);
  const item=list.children[0];assert.equal(item.children[0].src,'token.png');assert.equal(item.children[1].textContent,'Soldados');

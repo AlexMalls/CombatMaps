@@ -4,7 +4,7 @@ const script=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8').match(
 function source(name){const i=script.indexOf(`      function ${name}(`);return i<0?'':script.slice(i,script.indexOf('\n      }',i)+8);}
 function setup(){
   const captures=new Set();const node=()=>({attrs:{},dataset:{},classList:{add(){}},setAttribute(k,v){this.attrs[k]=String(v)}});
-  const c=vm.createContext({state:{size:48,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'highlight'},
+  const c=vm.createContext({GridAreaTools:require("../grid-area-tools.js"),highlightValue:{...node(),style:{}},rulerNumberFormat:new Intl.NumberFormat("pt-BR"),state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'highlight'},
     workspaceLayers:{clientWidth:960,clientHeight:720},cameraViewport:{clientWidth:960,clientHeight:720,getBoundingClientRect:()=>({left:10,top:20,right:970,bottom:740})},
     workspaceCard:{setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)},
     captures,highlightCells:new Map(),highlightTouches:new Set(),highlightBlocked:false,highlightSession:null,
@@ -75,4 +75,17 @@ test('exact corner endpoints in opposing directions do not paint beyond the poin
     c.start=start;c.end=end;const cells=vm.runInContext('getHighlightCells(start,end,48,origin)',c);
     assert.deepEqual(Array.from(cells,p=>`${p.col},${p.row}`),want);
   }
+});
+test('off-center diagonal drags do not create the double-width staircase',()=>{
+ const c=setup();const cells=c.getHighlightCells({x:1,y:45},{x:289,y:285},48,{x:0,y:0});assert.equal(cells.length,7);assert.deepEqual(Array.from(cells,p=>`${p.col},${p.row}`),['0,0','1,1','2,2','3,3','4,3','5,4','6,5']);
+});
+test('area tap is inert; dragging previews the current shape and number before committing',()=>{
+ for(const shape of ['line','circle','square','cone']){
+  const c=setup();c.state.highlightShape=shape;c.send('pointerdown');assert.equal(c.highlightCellsLayer.children.length,0);c.send('pointerup',{buttons:0});assert.equal(c.highlightCells.size,0);
+  c.send('pointerdown');c.send('pointermove',{clientX:634});assert.equal(c.highlightCells.size,0);assert.ok(c.highlightCellsLayer.children.length>0);assert.equal(c.highlightValue.textContent,'4,5');assert.equal(c.highlightValue.dataset.active,'true');c.send('pointerup',{clientX:634,buttons:0});assert.ok(c.highlightCells.size>0);assert.equal(c.highlightValue.dataset.active,'false');
+ }
+});
+test('shape cancellation and two-finger clearing preserve gesture isolation',()=>{
+ const c=setup();c.state.highlightShape='circle';c.send('pointerdown',{pointerType:'touch'});c.send('pointermove',{pointerType:'touch',clientX:634});c.send('pointercancel',{pointerType:'touch'});assert.equal(c.highlightCells.size,0);assert.equal(c.highlightValue.dataset.active,'false');
+ c.send('pointerdown',{pointerType:'touch'});c.send('pointerup',{pointerType:'touch',clientX:634,buttons:0});assert.ok(c.highlightCells.size>0);c.send('pointerdown',{pointerType:'touch'});c.send('pointerdown',{pointerId:2,pointerType:'touch',isPrimary:false});assert.equal(c.highlightCells.size,0);assert.equal(c.captures.size,0);
 });

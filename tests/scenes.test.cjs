@@ -93,3 +93,8 @@ test('status create and edit keep a single stable record',()=>{
  const c=vm.createContext({document:{getElementById:id=>fields[id]},isMasterMode:()=>true,statusTypes:[],nextStatusId:1,explorerState:{},renderAssetExplorerContent(){}});for(const name of ['openStatusEditor','confirmStatus'])vm.runInContext(source(name),c);
  c.openStatusEditor();fields['status-name'].value='Atordoado';c.confirmStatus();const record=c.statusTypes[0];c.openStatusEditor(record.id);assert.equal(fields['status-name'].value,'Atordoado');fields['status-description'].value='Não pode mover';c.confirmStatus();assert.equal(c.statusTypes.length,1);assert.equal(c.statusTypes[0],record);assert.equal(record.description,'Não pode mover');assert.equal(c.nextStatusId,2);
 });
+test('scene preview draws a scaled SVG grid and obeys visibility and opacity settings',()=>{
+ const node=()=>({style:{setProperty(k,v){this[k]=v}},attrs:{},dataset:{},setAttribute(k,v){this.attrs[k]=v}}),pathNode=node(),pattern=node();pattern.querySelector=()=>pathNode;const grid=node();grid.querySelector=()=>pattern;
+ const c=sceneContext();Object.assign(c,{window:{innerHeight:800},scenePreview:{...node(),clientWidth:402},scenePreviewStage:node(),scenePreviewGrid:grid,scenePreviewUniverse:node(),sceneBackgroundName:node()});vm.runInContext(source('renderScenePreview'),c);c.sceneGridSettings.opacity=100;c.renderScenePreview();assert.equal(grid.dataset.visible,'true');assert.equal(grid.style['--grid-opacity'],'1');assert.equal(pattern.attrs.width,'64');assert.equal(grid.attrs.viewBox,'0 0 800 400');assert.equal(pathNode.attrs['stroke-width'],'2');
+ c.sceneGridSettings.visible=false;c.renderScenePreview();assert.equal(grid.dataset.visible,'false');
+});
