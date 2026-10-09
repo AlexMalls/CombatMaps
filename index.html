@@ -1198,6 +1198,9 @@
     .token-dock__empty { font-size: var(--font-size-small); color: var(--color-text-muted); }
     .token-dock-ghost { position: fixed; z-index: var(--z-tooltip); pointer-events: none; opacity: 0.7; border: 1px solid var(--color-accent); border-radius: 0.25rem; background: var(--color-highlight-soft); box-shadow: 0 0 18px var(--color-magic-halo); }
     .token-dock-ghost[data-valid="false"] { border-color: var(--color-danger); opacity: 0.4; }
+    .token-paste-ghost { position: fixed; inset: 0; z-index: var(--z-tooltip); pointer-events: none; }
+    .token-paste-ghost .token-dock-ghost { position: absolute; }
+    .token-paste-ghost[data-valid="false"] .token-dock-ghost { border-color: var(--color-danger); }
     .token-dock-ghost img { display: block; width: 100%; height: 100%; object-fit: contain; }
 
     /* Variante do painel geral: cores locais, controles continuam compartilhados. */
@@ -2620,33 +2623,72 @@
         return true;
       }
 
-      function findTokenPasteTargets(items, columns, rows, isFree) {
-        if (!items.length) return null;
-        const minCol = Math.min(...items.map(item => item.cell.col)), minRow = Math.min(...items.map(item => item.cell.row));
-        const width = Math.max(...items.map(item => item.cell.col + item.cell.size)) - minCol;
-        const height = Math.max(...items.map(item => item.cell.row + item.cell.size)) - minRow;
-        const origins = [];
-        for (let row = 0; row <= rows - height; row++) for (let col = 0; col <= columns - width; col++) {
-          origins.push({ col, row, distance: (col - minCol - 1) ** 2 + (row - minRow - 1) ** 2 });
-        }
-        origins.sort((a, b) => a.distance - b.distance || a.row - b.row || a.col - b.col);
-        for (const origin of origins) {
-          const targets = items.map(item => ({ col: origin.col + item.cell.col - minCol, row: origin.row + item.cell.row - minRow, size: item.cell.size }));
-          if (targets.every(isFree)) return targets;
-        }
-        return null;
+      let tokenPasteSession = null;
+      let tokenPastePointer = null;
+      let tokenPasteRelease = null;
+      let tokenPasteClickUntil = 0;
+
+      function getTokenPasteTargets(items, col, row) {
+        const minCol = Math.min(...items.map(item => item.cell.col));
+        const minRow = Math.min(...items.map(item => item.cell.row));
+        return items.map(item => ({ col: col + item.cell.col - minCol, row: row + item.cell.row - minRow, size: item.cell.size }));
+      }
+
+      function cancelTokenPaste() {
+        if (!tokenPasteSession) return;
+        tokenPasteSession.ghost.remove();
+        tokenPasteSession = null;
+      }
+
+      function updateTokenPasteGhost(clientX, clientY) {
+        const session = tokenPasteSession;
+        if (!session) return;
+        const local = clientToWorkspaceLayer(clientX, clientY), origin = getGridOrigin();
+        const col = Math.floor((local.x - origin.x) / state.size), row = Math.floor((local.y - origin.y) / state.size);
+        session.targets = getTokenPasteTargets(session.snapshots, col, row);
+        const hit = document.elementFromPoint(clientX, clientY);
+        session.valid = local.insideViewport && Boolean(hit && cameraViewport.contains(hit) && !hit.closest('.corner-settings, .token-dock, .token-status, .command-bar, dialog')) && session.targets.every(canPlaceTokenFootprint);
+        const rect = cameraViewport.getBoundingClientRect();
+        session.targets.forEach((cell, index) => {
+          const pixels = cell.size * state.size * state.cameraZoom;
+          Object.assign(session.ghost.children[index].style, {
+            left: `${rect.left + state.cameraX + (origin.x + cell.col * state.size) * state.cameraZoom}px`,
+            top: `${rect.top + state.cameraY + (origin.y + cell.row * state.size) * state.cameraZoom}px`,
+            width: `${pixels}px`, height: `${pixels}px`
+          });
+        });
+        session.ghost.dataset.valid = String(session.valid);
       }
 
       function pasteCopiedTokens() {
         if (state.touchMode || !isMasterMode() || state.isMoving || hasPriorityTool() || !tokenClipboard.length) return false;
         if (tokenClipboard.some(item => !TOKEN_TYPES[item.typeId])) return false;
-        const origin = getGridOrigin();
-        const targets = findTokenPasteTargets(tokenClipboard,
-          Math.floor((workspaceLayers.clientWidth - origin.x) / state.size),
-          Math.floor((workspaceLayers.clientHeight - origin.y) / state.size), canPlaceTokenFootprint);
-        if (!targets) { tokenDockStatus.textContent = "Não há espaço livre para colar este grupo."; return true; }
+        cancelWorkspaceGestures("prévia de colagem");
+        const ghost = document.createElement("div");
+        ghost.className = "token-paste-ghost";
+        ghost.setAttribute("aria-hidden", "true");
+        const snapshots = tokenClipboard.map(item => ({ ...item, cell: { ...item.cell } }));
+        snapshots.forEach(snapshot => {
+          const preview = document.createElement("div"), image = document.createElement("img");
+          preview.className = "token-dock-ghost";
+          image.src = TOKEN_TYPES[snapshot.typeId].image; image.alt = ""; image.draggable = false;
+          preview.append(image); ghost.append(preview);
+        });
+        document.body.append(ghost);
+        tokenPasteSession = { ghost, snapshots, targets: [], valid: false };
+        const rect = cameraViewport.getBoundingClientRect();
+        const point = tokenPastePointer || { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        updateTokenPasteGhost(point.x, point.y);
+        tokenDockStatus.textContent = "Clique no mapa para colar. Esc cancela.";
+        return true;
+      }
+
+      function confirmTokenPaste() {
+        const session = tokenPasteSession;
+        if (!session || !session.valid || !session.targets.every(canPlaceTokenFootprint)) return false;
+        const { snapshots, targets } = session;
         cancelWorkspaceGestures("colagem de tokens");
-        const items = tokenClipboard.map((snapshot, index) => {
+        const items = snapshots.map((snapshot, index) => {
           const cell = targets[index], token = buildTokenInstance(snapshot.typeId, cell);
           token.dataset.gridSize = String(cell.size);
           Object.assign(getTokenInfo(token), { life: snapshot.life, maxLife: snapshot.maxLife, status: snapshot.status });
@@ -2659,6 +2701,45 @@
         updateAllTokens(); selectTokenSet(items.map(item => item.token)); updateMovementHistoryUI();
         tokenDockStatus.textContent = `${items.length} token(s) colado(s).`;
         return true;
+      }
+
+      function dispatchTokenPasteInput(event) {
+        if (event.type === "pointermove" && event.pointerType === "mouse") {
+          tokenPastePointer = { x: event.clientX, y: event.clientY };
+          if (tokenPasteSession) updateTokenPasteGhost(event.clientX, event.clientY);
+        }
+        if (event.type === "click" || event.type === "contextmenu") {
+          if (performance.now() < tokenPasteClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+          return;
+        }
+        if ((event.type === "pointerup" || event.type === "pointercancel") && event.pointerId === tokenPasteRelease) {
+          event.preventDefault(); event.stopImmediatePropagation(); tokenPasteRelease = null;
+          tokenPasteClickUntil = performance.now() + 500;
+          return;
+        }
+        if (!tokenPasteSession) return;
+        if (event.type === "keydown" && event.key === "Escape") {
+          event.preventDefault(); event.stopImmediatePropagation(); cancelTokenPaste(); return;
+        }
+        if (event.type !== "pointerdown") return;
+        if (event.pointerType !== "mouse" || !cameraViewport.contains(event.target) || event.target.closest('.corner-settings, .token-dock, .token-status, .command-bar, dialog')) {
+          cancelTokenPaste(); return;
+        }
+        event.preventDefault(); event.stopImmediatePropagation(); tokenPasteRelease = event.pointerId;
+        if (event.button !== 0) { cancelTokenPaste(); return; }
+        updateTokenPasteGhost(event.clientX, event.clientY);
+        if (!confirmTokenPaste()) {
+          const ghost = tokenPasteSession.ghost;
+          ghost.getAnimations().forEach(animation => animation.cancel());
+          ghost.animate([
+            { filter: "none", opacity: 1 },
+            { filter: "sepia(1) saturate(8) hue-rotate(315deg)", opacity: 0.9 },
+            { filter: "none", opacity: 1 },
+            { filter: "sepia(1) saturate(8) hue-rotate(315deg)", opacity: 0.9 },
+            { filter: "none", opacity: 1 }
+          ], { duration: 460 });
+          tokenDockStatus.textContent = "Posição ocupada ou fora do mapa. Escolha outra posição.";
+        }
       }
 
       function getDockDropAtClient(typeId, clientX, clientY) {
@@ -3860,6 +3941,11 @@
       });
 
       // O arraste de modelos pertence à interface, não aos gestos da câmera.
+      // Captura anterior aos gestos do mapa: a prévia nunca move os originais.
+      ["pointermove", "pointerdown", "pointerup", "pointercancel", "click", "contextmenu", "keydown"].forEach(type => {
+        window.addEventListener(type, dispatchTokenPasteInput, { capture: true, passive: false });
+      });
+
       ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture", "keydown"].forEach(type => {
         document.addEventListener(type, dispatchTokenDockInput, { capture: true, passive: false });
       });
@@ -6476,6 +6562,7 @@
       function cancelWorkspaceGestures(reason = "cancelado") {
         finishSceneImageGesture();
         cancelTokenDockDrag();
+        cancelTokenPaste();
         finishExplorerGesture();
         finishTokenStatusDrag();
         finishRulerMeasurement();

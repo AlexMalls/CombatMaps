@@ -67,7 +67,7 @@ test('focus cleanup removes an active ruler and cancels its pending frame',()=>{
   const c=setup();c.send('pointerdown');c.send('pointermove',{clientX:600});
   Object.assign(c,{canvasTapCandidates:new Map(),tokenTapCandidates:new Map(),touchDeselectPointers:new Map(),
     threeFingerPointers:new Map(),formationSession:null,lassoSession:null,desktopCameraPan:null,
-    cancelPendingCanvasInteractions(){},finishExplorerGesture(){},finishSceneImageGesture(){},cancelTokenDockDrag(){},finishTokenStatusDrag(){}, cancelAllTokenPresses(){},cancelActiveLasso(){},cancelBlockProjection(){},resetTouchPairState(){},closeTokenActionMenu(){}});
+    cancelPendingCanvasInteractions(){},finishExplorerGesture(){},finishSceneImageGesture(){},cancelTokenDockDrag(){},cancelTokenPaste(){},finishTokenStatusDrag(){}, cancelAllTokenPresses(){},cancelActiveLasso(){},cancelBlockProjection(){},resetTouchPairState(){},closeTokenActionMenu(){}});
   vm.runInContext(source('cancelWorkspaceGestures')+';cancelWorkspaceGestures("blur")',c);
   assert.equal(c.rulerSession,null);assert.equal(c.frames.size,0);assert.equal(c.captures.size,0);assert.equal(c.rulerLayer.dataset.active,'false');
 });
