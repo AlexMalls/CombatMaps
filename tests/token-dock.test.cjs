@@ -42,7 +42,7 @@ function dragContext(){
  const captures=new Set();let stopped=0;
  const node=()=>({children:[],dataset:{},style:{},append(...children){this.children.push(...children)},remove(){this.removed=true},setAttribute(){}});
  const target={setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)};
- const c=context({tokenDockDrag:null,document:{createElement:node,body:node()},cancelWorkspaceGestures(){},tokenDockStatus:{},
+ const c=context({notifyPriorityToolBlocked(){c.warned=(c.warned||0)+1},tokenDockDrag:null,document:{createElement:node,body:node()},cancelWorkspaceGestures(){},tokenDockStatus:{},
   getDockDropAtClient:(id,x,y)=> x>=0&&x<480&&y>=0&&y<480?c.getTokenDropCell(id,x,y):null,
   cameraViewport:{getBoundingClientRect:()=>({left:0,top:0})},createTokenFromType(id,cell){c.created={id,cell}}});
  for(const name of ['updateTokenDockGhost','cancelTokenDockDrag','beginTokenDockDrag','dispatchTokenDockInput'])vm.runInContext(source(name),c);
@@ -96,4 +96,11 @@ test('created units are fully initialized and undo/redo preserve canonical ident
  assert.equal(c.undoLastMovement(),true);assert.equal(c.tokens.length,0);assert.equal(t.isConnected,false);assert.equal(c.getTokenInfo(t),info);
  assert.equal(c.redoLastMovement(),true);assert.equal(c.tokens[0],t);assert.equal(c.getTokenInfo(t).id,info.id);assert.equal(c.getTokenInfo(t).life,10000);
  assert.equal(c.undoLastMovement(),true);const second=c.createTokenFromType('soldiers',{col:2,row:2,size:1});assert.notEqual(c.getTokenInfo(second).id,info.id);assert.equal(c.movementRedoHistory.length,0);
+});
+
+test('priority blocks mouse and touch token drags and points to the active tool',()=>{
+ for(const pointerType of ['mouse','touch']){const c=dragContext();c.hasPriorityTool=()=>true;c.beginTokenDockDrag(c.event('pointerdown',{pointerType}),'soldiers');assert.equal(c.warned,1);assert.equal(c.tokenDockDrag,null);assert.equal(c.captures.size,0);}
+});
+test('priority-disabled dock items remain event targets but master and movement still disable them',()=>{
+ const button={setAttribute(k,v){this[k]=v}},c=context({tokenDockList:{querySelectorAll:()=>[button]}});vm.runInContext(source('syncTokenDockAvailability'),c);c.hasPriorityTool=()=>true;c.syncTokenDockAvailability();assert.equal(button.disabled,false);assert.equal(button['aria-disabled'],'true');c.hasPriorityTool=()=>false;c.syncTokenDockAvailability();assert.equal(button['aria-disabled'],'false');c.state.isMoving=true;c.syncTokenDockAvailability();assert.equal(button.disabled,true);
 });

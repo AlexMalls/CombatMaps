@@ -1147,6 +1147,7 @@
     }
     .token-dock[data-open="true"] { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
     .token-dock__list { display: flex; align-items: center; gap: var(--space-3); overflow-x: auto; min-height: 5.5rem; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x; }
+    .token-dock__item[aria-disabled="true"] { opacity: .35; cursor: not-allowed; }
     .token-dock__item { flex: 0 0 auto; flex-direction: column; width: 4.75rem; min-height: 5rem; padding: var(--space-1); font-size: 0.7rem; touch-action: none; user-select: none; cursor: grab; }
     .token-dock__item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scene-dock__item { width: 7rem; cursor: pointer; touch-action: manipulation; }
@@ -2355,8 +2356,12 @@
       };
 
       function syncTokenDockAvailability() {
-        const disabled = !isMasterMode() || hasPriorityTool() || state.isMoving;
-        tokenDockList.querySelectorAll("[data-token-template]").forEach(button => { button.disabled = disabled; });
+        const disabled = !isMasterMode() || state.isMoving;
+        tokenDockList.querySelectorAll("[data-token-template]").forEach(button => {
+          // Manter eventos disponíveis para explicar o bloqueio pela ferramenta.
+          button.disabled = disabled;
+          button.setAttribute("aria-disabled", String(disabled || hasPriorityTool()));
+        });
       }
 
       function setTokenDockOpen(open, { restoreFocus = false } = {}) {
@@ -2497,7 +2502,8 @@
       }
 
       function beginTokenDockDrag(event, typeId) {
-        if (!isMasterMode() || !state.tokenDockOpen || hasPriorityTool() || state.isMoving || tokenDockDrag || event.button !== 0 || !event.isPrimary || !TOKEN_TYPES[typeId]) return;
+        if (!isMasterMode() || !state.tokenDockOpen || state.isMoving || tokenDockDrag || event.button !== 0 || !event.isPrimary || !TOKEN_TYPES[typeId]) return;
+        if (hasPriorityTool()) { event.preventDefault(); notifyPriorityToolBlocked(); return; }
         event.preventDefault();
         event.stopPropagation();
         cancelWorkspaceGestures("arraste de um modelo de token");
@@ -3274,6 +3280,21 @@
         return TOOL_DEFINITIONS[state.activeTool]?.type === "priority";
       }
 
+      function notifyPriorityToolBlocked() {
+        if (!hasPriorityTool()) return;
+        if (!state.toolsOpen) setToolsOpen(true);
+        const button = toolButtons.find(item => item.dataset.tool === state.activeTool);
+        if (!button) return;
+        button.getAnimations().filter(animation => animation.id === "priority-input-warning").forEach(animation => animation.cancel());
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const frame = { color: "var(--color-danger)", opacity: 1, transform: reduced ? "none" : "scale(1.18)" };
+        const animation = button.animate([
+          { offset: 0 }, { ...frame, offset: .2 }, { offset: .45 },
+          { ...frame, offset: .7 }, { offset: 1 }
+        ], { duration: reduced ? 400 : 800, easing: "ease-in-out" });
+        animation.id = "priority-input-warning";
+      }
+
       function syncToolsUI() {
         syncTokenDockAvailability();
         syncSceneDockAvailability();
@@ -3330,6 +3351,7 @@
       function interceptWorkspaceInput(event) {
         if (!ownsRulerPointer(event) && !ownsHighlightPointer(event) && !blocksWorkspaceInput(event)) return;
         if (event.type === "pointerdown") {
+          if (event.isPrimary && event.button === 0 && event.target instanceof Element && event.target.closest(".token-action-menu, .token-status")) notifyPriorityToolBlocked();
           if (state.open) setOpen(false);
           if (state.appSettingsOpen) setAppSettingsOpen(false);
         }

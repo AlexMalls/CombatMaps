@@ -117,3 +117,9 @@ test('highlight is exclusive and clears on disable or switching tools, while hea
   vm.runInContext('toggleTool("highlight")',c);assert.equal(c.state.activeTool,null);assert.equal(c.cleared,1);
   vm.runInContext('toggleTool("highlight");toggleTool("ruler")',c);assert.equal(c.state.activeTool,'ruler');assert.equal(c.cleared,2);
 });
+
+test('blocked HUD warning opens tools, pulses only the active priority tool and preserves selection',()=>{
+ const c=setup();let frames,options,cancelled=0;const old={id:'priority-input-warning',cancel(){cancelled++}},ring={id:'rainbow',cancel(){throw Error('must preserve rainbow')}};c.window={matchMedia:()=>({matches:false})};c.toolButtons.forEach(b=>{b.getAnimations=()=>[old,ring];b.animate=(f,o)=>{frames=f;options=o;return {}}});vm.runInContext(source('notifyPriorityToolBlocked'),c);
+ c.notifyPriorityToolBlocked();assert.equal(frames,undefined);c.toggleTool('ruler');c.notifyPriorityToolBlocked();assert.equal(c.state.toolsOpen,true);assert.equal(c.state.activeTool,'ruler');assert.equal(cancelled,1);assert.equal(frames[1].color,'var(--color-danger)');assert.equal(frames[1].transform,'scale(1.18)');assert.equal(options.duration,800);
+ c.window.matchMedia=()=>({matches:true});c.notifyPriorityToolBlocked();assert.equal(frames[1].transform,'none');assert.equal(options.duration,400);
+});
