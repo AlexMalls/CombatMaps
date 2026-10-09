@@ -1,5 +1,5 @@
 /* Componentes da barra de comando — toda a aparência depende da paleta geral. */
-:root { --command-height: 7rem; --command-width: 10.5rem; --command-side-top: 4.5rem; --command-side-height: min(32rem, calc(100dvh - 9rem)); --command-curve: 1rem; }
+:root { --command-height: 7rem; --command-width: 10.5rem; --command-side-top: 4.5rem; --command-side-height: calc(100dvh - 9rem); --command-curve: 1rem; }
 .command-bar {
   position: fixed; top: var(--frame-thickness); left: 50%;
   width: calc(100vw - 9rem); height: 0; transform: translateX(-50%);
