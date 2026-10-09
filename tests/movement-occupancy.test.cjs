@@ -3,7 +3,7 @@ function source(name){const i=script.indexOf(`      function ${name}(`);assert.o
 function setup(){
  const mover={grid:{col:0,row:0,size:2},life:10000},stationary={grid:{col:4,row:4,size:1},life:10000};
  const c=vm.createContext({mover,stationary,tokens:[mover,stationary],state:{size:48},workspaceLayers:{clientWidth:480,clientHeight:480},gridPointMarkers:[],nextGridPointId:1,getSelectedTokensInNumberOrder:()=>[mover],getTokenGridState:t=>t.grid,getTokenInfo:t=>({life:t.life}),getGridOrigin:()=>({x:0,y:0}),clientToWorkspaceLayer:(x,y)=>({x,y,insideViewport:true}),debugLog(){},showInvalidGridPoint(){c.invalid=true},gridPointMarkersLayer:{append(){}},document:{createElement:()=>({dataset:{}})},updateGridPointMarkers(){}});
- for(const name of ['gridFootprintsOverlap','footprintOverlapsUnselectedToken','tokenFits','canExecuteMoveSelection','addGridPointAtClient'])vm.runInContext(source(name),c);return c;
+ for(const name of ['gridFootprintsOverlap','footprintOverlapsUnselectedToken','tokenFits','canExecuteMoveSelection','getGridPointForSelectionIndex','getGridPointMarkerAtClient','getGridFootprintRect','removeGridPointById','addGridPointAtClient'])vm.runInContext(source(name),c);return c;
 }
 test('every cell of a 2x2 token destination is checked against stationary units',()=>{
  const c=setup();assert.equal(c.addGridPointAtClient(3*48+2,3*48+2),null);assert.equal(c.invalid,true);assert.equal(c.gridPointMarkers.length,0);assert.ok(c.addGridPointAtClient(2*48+2,2*48+2));

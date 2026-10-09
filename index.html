@@ -4487,6 +4487,11 @@
         });
       }
 
+      // O índice pertence à seleção, não à posição compactada da lista de destinos.
+      function getGridPointForSelectionIndex(index) {
+        return gridPointMarkers.find((marker, position) => (marker.selectionIndex ?? position) === index) || null;
+      }
+
       function getGridPointTokenSize(index) {
         const token = getSelectionReferenceOrder()[index];
         return token ? getTokenGridState(token).size : null;
@@ -4544,10 +4549,10 @@
       function renderMovementGuides() {
         movementGuidesLayer.textContent = "";
         const selectedTokens = getSelectionReferenceOrder();
-        const guideCount = Math.min(selectedTokens.length, gridPointMarkers.length);
+        const guideCount = selectedTokens.length;
         for (let index = 0; index < guideCount; index += 1) {
           const token = selectedTokens[index];
-          const marker = gridPointMarkers[index];
+          const marker = getGridPointForSelectionIndex(index);
           if (!token || !marker) continue;
 
           const tokenState = getTokenGridState(token);
@@ -4573,10 +4578,11 @@
       function updateGridPointMarkers() {
         trimGridPointsToSelection();
         gridPointMarkers.forEach((marker, index) => {
-          const tokenSize = getGridPointTokenSize(index);
+          const selectionIndex = marker.selectionIndex ?? index;
+          const tokenSize = getGridPointTokenSize(selectionIndex);
           if (tokenSize === null) return;
           marker.size = tokenSize;
-          setGridPointMarkerGeometry(marker.element, marker.col, marker.row, tokenSize, index + 1);
+          setGridPointMarkerGeometry(marker.element, marker.col, marker.row, tokenSize, selectionIndex + 1);
         });
         renderMovementGuides();
         if (!tokenActionMenu.hidden) syncTokenActionMenu();
@@ -4609,13 +4615,13 @@
       function reconcileSelectionArtifacts(previousOrder, nextOrder) {
         const markerByToken = new Map();
         previousOrder.forEach((token, index) => {
-          const marker = gridPointMarkers[index];
+          const marker = getGridPointForSelectionIndex(index);
           if (marker) markerByToken.set(token, marker);
         });
         const nextMarkerList = [];
-        nextOrder.forEach(token => {
+        nextOrder.forEach((token, index) => {
           const marker = markerByToken.get(token);
-          if (marker) nextMarkerList.push(marker);
+          if (marker) { marker.selectionIndex = index; nextMarkerList.push(marker); }
         });
         markerByToken.forEach(marker => {
           if (!nextMarkerList.includes(marker)) marker.element.remove();
@@ -4686,7 +4692,8 @@
 
       function canExecuteMoveSelection() {
         const selectedTokens = getSelectedTokensInNumberOrder();
-        if (!selectedTokens.length || gridPointMarkers.length !== selectedTokens.length) return false;
+        if (!selectedTokens.length || gridPointMarkers.length !== selectedTokens.length ||
+            selectedTokens.some((token, index) => !getGridPointForSelectionIndex(index))) return false;
         const selectedSet = new Set(selectedTokens);
         return gridPointMarkers.every((marker, index) => tokenFits(marker.col, marker.row, marker.size) &&
           !footprintOverlapsUnselectedToken(marker, selectedSet) &&
@@ -4712,7 +4719,7 @@
 
       function flashTokensMissingTargets() {
         const selectedTokens = getSelectedTokensInNumberOrder();
-        const missingTokens = selectedTokens.slice(gridPointMarkers.length);
+        const missingTokens = selectedTokens.filter((token, index) => !getGridPointForSelectionIndex(index));
         if (!missingTokens.length) return;
 
         debugLog("move", "destinos faltando; destacando unidades", {
@@ -4807,8 +4814,10 @@
 
         // Cada token selecionado possui exatamente um destino. Depois que todos
         // recebem um destino, novos cliques não criam números extras.
-        const markerIndex = gridPointMarkers.length;
-        if (markerIndex >= selectedTokens.length) {
+        const existing = getGridPointMarkerAtClient(clientX, clientY);
+        if (existing) { removeGridPointById(existing.id); return null; }
+        const markerIndex = selectedTokens.findIndex((token, index) => !getGridPointForSelectionIndex(index));
+        if (markerIndex < 0) {
           debugLog("grid", "destino ignorado: todos os tokens já possuem destino", { selected: selectedTokens.length, destinations: gridPointMarkers.length });
           return null;
         }
@@ -4847,7 +4856,7 @@
         }
 
         const element = document.createElement("span");
-        const marker = { id: nextGridPointId++, col, row, size: tokenSize, element };
+        const marker = { id: nextGridPointId++, selectionIndex: markerIndex, col, row, size: tokenSize, element };
         element.className = "grid-point-marker";
         element.dataset.gridPointId = String(marker.id);
         gridPointMarkersLayer.append(element);
@@ -4860,6 +4869,7 @@
       function removeGridPointById(id) {
         const index = gridPointMarkers.findIndex(marker => marker.id === id);
         if (index < 0) return false;
+        gridPointMarkers.forEach((marker, position) => { marker.selectionIndex ??= position; });
         const [marker] = gridPointMarkers.splice(index, 1);
         marker.element.remove();
         updateGridPointMarkers();
@@ -4897,9 +4907,9 @@
         const plan = selectedTokens.map((token, index) => ({
           token,
           target: {
-            col: gridPointMarkers[index].col,
-            row: gridPointMarkers[index].row,
-            size: gridPointMarkers[index].size
+            col: getGridPointForSelectionIndex(index).col,
+            row: getGridPointForSelectionIndex(index).row,
+            size: getGridPointForSelectionIndex(index).size
           }
         }));
         const duration = 360;
@@ -5165,7 +5175,8 @@
       const BLOCK_DRAG_THRESHOLD = 14;
 
       function snapshotGridPointMarkers() {
-        return gridPointMarkers.map(marker => ({
+        return gridPointMarkers.map((marker, index) => ({
+          selectionIndex: marker.selectionIndex ?? index,
           col: marker.col,
           row: marker.row,
           size: marker.size
@@ -5179,6 +5190,7 @@
           element.className = `grid-point-marker${invalid ? " grid-point-marker--formation-invalid" : ""}`;
           const marker = {
             id: nextGridPointId++,
+            selectionIndex: data.selectionIndex ?? index,
             col: data.col,
             row: data.row,
             size: data.size,
@@ -5187,7 +5199,7 @@
           element.dataset.gridPointId = String(marker.id);
           gridPointMarkersLayer.append(element);
           gridPointMarkers.push(marker);
-          setGridPointMarkerGeometry(element, marker.col, marker.row, marker.size, index + 1);
+          setGridPointMarkerGeometry(element, marker.col, marker.row, marker.size, marker.selectionIndex + 1);
         });
         movementGuidesLayer.dataset.invalid = String(Boolean(invalid));
         renderMovementGuides();
@@ -5482,6 +5494,7 @@
           element.className = `grid-point-marker${invalid ? " grid-point-marker--formation-invalid" : ""}`;
           const marker = {
             id: nextGridPointId++,
+            selectionIndex: session.selectedTokens.indexOf(session.pendingTokens[index]),
             col: candidate.col,
             row: candidate.row,
             size: candidate.size,
@@ -5490,7 +5503,7 @@
           element.dataset.gridPointId = String(marker.id);
           gridPointMarkersLayer.append(element);
           gridPointMarkers.push(marker);
-          setGridPointMarkerGeometry(element, marker.col, marker.row, marker.size, baseCount + index + 1);
+          setGridPointMarkerGeometry(element, marker.col, marker.row, marker.size, marker.selectionIndex + 1);
         });
         movementGuidesLayer.dataset.invalid = String(Boolean(invalid));
         renderMovementGuides();
@@ -5591,7 +5604,7 @@
         if (state.open || state.appSettingsOpen || !tokenActionMenu.hidden) return false;
         const selectedTokens = getSelectedTokensInNumberOrder();
         const baseCount = Math.min(gridPointMarkers.length, selectedTokens.length);
-        const pendingTokens = selectedTokens.slice(baseCount);
+        const pendingTokens = selectedTokens.filter((token, index) => !getGridPointForSelectionIndex(index));
         if (!pendingTokens.length) return false;
         debugLog("formation", "formação por segurar iniciada", {
           pointerType: candidate.pointerType,
@@ -6555,6 +6568,13 @@
         }
         if (!candidate.valid || lassoSession || threeFingerGestureLatched) {
           debugLog("touch", "toque no canvas descartado", { valid: candidate.valid, lasso: Boolean(lassoSession), threeFinger: threeFingerGestureLatched });
+          return;
+        }
+        const destination = getGridPointMarkerAtClient(event.clientX, event.clientY);
+        if (destination) {
+          removeGridPointById(destination.id);
+          lastCanvasPress = null;
+          closeTokenActionMenu();
           return;
         }
         if (shouldOpenTouchActionMenu(event)) {
