@@ -12,6 +12,10 @@
     const center = (start + end) / 2;
     return Math.max(0, Math.min(1, visible, (center - min) / fade, (max - center) / fade));
   }
+  function normalizeOpacity(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(100, Math.max(0, number)) / 100 : 1;
+  }
   function planBatch(tokens, getInfo, kind, value) {
     if (!['damage','heal','status'].includes(kind)) return [];
     const amount = Number(value);
@@ -38,6 +42,7 @@
     const showLinks = document.getElementById('command-show-links'), status = document.getElementById('command-status-value');
     const damage = document.getElementById('command-damage-value'), heal = document.getElementById('command-heal-value');
     const message = document.getElementById('command-message');
+    const opacity = document.getElementById('command-link-opacity'), opacityValue = document.getElementById('command-link-opacity-value');
     const selection = new Selection(), rows = new Map(), drawings = new Map();
     const format = new Intl.NumberFormat('pt-BR');
     let open = false, orientation = 'top', hovered = null, frame = 0, gesture = null, dragFrame = 0;
@@ -212,6 +217,13 @@
     list.addEventListener('scroll',schedule,{passive:true});
     bar.addEventListener('transitionrun',schedule);bar.addEventListener('transitionend',schedule);
     window.addEventListener('resize',schedule);
+    function syncOpacity() {
+      const value = normalizeOpacity(opacity.value);
+      group.style.opacity = String(value);
+      opacityValue.textContent = `${Math.round(value * 100)}%`;
+      opacity.style.setProperty('--range-progress', `${value * 100}%`);
+    }
+    opacity.addEventListener('input', syncOpacity); syncOpacity();
     showLinks.addEventListener('change',()=>{if(!showLinks.checked)clearDrawings();else schedule();});
     [damage,heal].forEach(input=>{input.addEventListener('input',()=>{input.value=input.value.replace(/[^0-9]/g,'').slice(0,12);});});
     bar.querySelectorAll('[data-command-action]').forEach(button=>button.addEventListener('click',()=>{
@@ -224,6 +236,6 @@
     }));
     return {setOpen,setOrientation,inspect,refresh,refreshToken,schedule,isOpen:()=>open,getSelected:()=>[...selection.tokens],selection};
   }
-  const api={create,Selection,visibilityFade,planBatch};
+  const api={create,Selection,visibilityFade,planBatch,normalizeOpacity};
   if(typeof module!=='undefined' && module.exports)module.exports=api;else root.CommandBar=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

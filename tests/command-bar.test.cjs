@@ -50,3 +50,7 @@ test('holding map tokens redirects consultation into the command bar without flo
 test('dead tokens reject all command actions even with stale selection',()=>{
  const dead=token(0);for(const kind of ['damage','heal','status'])assert.equal(CommandBar.planBatch([dead],t=>t.info,kind,kind==='status'?'Normal':'1000').length,0);assert.equal(dead.info.life,0);
 });
+
+test('rainbow opacity accepts full, partial and invisible links with bounded values',()=>{
+ assert.equal(CommandBar.normalizeOpacity('100'),1);assert.equal(CommandBar.normalizeOpacity('35'),.35);assert.equal(CommandBar.normalizeOpacity('0'),0);assert.equal(CommandBar.normalizeOpacity(-10),0);assert.equal(CommandBar.normalizeOpacity(200),1);assert.equal(CommandBar.normalizeOpacity('invalid'),1);
+});

@@ -1687,6 +1687,7 @@
           <header class="command-bar__header">
             <h2 class="command-bar__title">Comando</h2><span id="command-count" class="command-bar__count">0 selecionados</span>
             <label class="command-bar__check"><input id="command-show-links" type="checkbox" checked>Mostrar vínculos</label>
+            <label class="command-bar__opacity">Opacidade<input id="command-link-opacity" type="range" min="0" max="100" step="1" value="100" aria-label="Opacidade dos vínculos rainbow"><output id="command-link-opacity-value" for="command-link-opacity">100%</output></label>
             <div class="command-bar__controls">
               <div class="command-bar__action"><button type="button" data-command-action="damage" disabled>Dano</button><input id="command-damage-value" type="text" inputmode="numeric" pattern="[0-9]*" value="1000" maxlength="12" aria-label="Valor de dano" autocomplete="off"></div>
               <div class="command-bar__action"><button type="button" data-command-action="heal" disabled>Cura</button><input id="command-heal-value" type="text" inputmode="numeric" pattern="[0-9]*" value="1000" maxlength="12" aria-label="Valor de cura" autocomplete="off"></div>
