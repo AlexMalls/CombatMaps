@@ -171,6 +171,14 @@
       font: var(--font-size-body)/1.5 var(--font-interface);
       -webkit-font-smoothing: antialiased;
     }
+    /* A interface é uma superfície de interação, inclusive no Safari/iPad em modo desktop.
+       Só campos de texto e o log permitem seleção nativa; laço/régua usam suas próprias seleções. */
+    body, body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    body input:is(:not([type]), [type="text"], [type="number"], [type="email"], [type="url"], [type="tel"], [type="search"], [type="password"]),
+    body textarea, body [contenteditable="true"], body [contenteditable=""], body [contenteditable="plaintext-only"], body .debug-dialog__output {
+      -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+    }
+    body img, body svg { -webkit-user-drag: none; }
     button, input, select, textarea { font: inherit; }
     button, input, select, textarea, a { -webkit-tap-highlight-color: transparent; }
     button, input, select, textarea { accent-color: var(--color-accent); }
@@ -3581,6 +3589,35 @@
         rulerSession.end = rulerGridPointAtClient(event.clientX, event.clientY);
         scheduleRulerMeasurement();
       }
+
+      function allowsNativeTextSelection(target) {
+        const element = target instanceof Element ? target : target?.parentElement;
+        const field = element?.closest("input, textarea, [contenteditable], .debug-dialog__output");
+        if (!field) return false;
+        if (field.tagName === "INPUT") return ["text", "number", "email", "url", "tel", "search", "password"].includes(field.type);
+        return field.tagName === "TEXTAREA" || field.isContentEditable || field.matches(".debug-dialog__output");
+      }
+
+      function preventInterfaceTextSelection(event) {
+        if (!allowsNativeTextSelection(event.target)) event.preventDefault();
+      }
+
+      function clearInterfaceTextSelection() {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !document.body.contains(selection.anchorNode)) return;
+        if (allowsNativeTextSelection(selection.anchorNode) || allowsNativeTextSelection(selection.focusNode)) return;
+        selection.removeAllRanges();
+      }
+
+      // Sem preventDefault no toque: preservar cliques, long press, laço, sliders e pinça.
+      document.addEventListener("selectstart", preventInterfaceTextSelection, true);
+      document.addEventListener("selectionchange", clearInterfaceTextSelection);
+      document.addEventListener("pointerdown", event => {
+        if (!allowsNativeTextSelection(event.target)) clearInterfaceTextSelection();
+      }, true);
+      document.addEventListener("dragstart", event => {
+        if (!allowsNativeTextSelection(event.target)) event.preventDefault();
+      }, true);
 
       workspaceCard.addEventListener("lostpointercapture", event => {
         if (rulerSession?.pointerId === event.pointerId) finishRulerMeasurement();
