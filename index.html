@@ -569,8 +569,8 @@
     .grid-highlight-cell { fill: var(--color-highlight-soft); stroke: url(#grid-highlight-spectrum); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
     .grid-highlight-value[data-active="false"] { visibility: hidden; }
     .grid-highlight-value { fill: var(--color-highlight); font: 600 15px var(--font-interface); paint-order: stroke; stroke: var(--color-explorer-shadow); stroke-width: 4px; stroke-linejoin: round; }
-    .highlight-tool__badge { position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; pointer-events: none; background: var(--color-popup); border-radius: 2px; }
-    .ui-tool .highlight-tool__badge svg { width: 10px; height: 10px; }
+    .highlight-tool__badge { position: absolute; top: 8px; left: 8px; width: 9px; height: 9px; pointer-events: none; background: transparent; }
+    .ui-tool .highlight-tool__badge svg { width: 9px; height: 9px; }
     .highlight-shapes { position: absolute; right: calc(100% + 8px); top: 3.2rem; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-popup); box-shadow: var(--shadow-control); }
     .highlight-shapes .ui-tool { width: 2rem; height: 2rem; }
     .highlight-shapes .ui-tool[aria-pressed="true"] { background: var(--color-highlight-soft); }
@@ -3369,7 +3369,7 @@
           else state.visualTools.add(id);
         } else {
           if (state.isMoving) return false;
-          if (state.activeTool === "highlight") { clearGridHighlights(); setHighlightShapesOpen(false); }
+          if (state.activeTool === "highlight") { clearGridHighlights(); setHighlightShapesOpen(false); resetHighlightShape(); }
           cancelWorkspaceGestures("ferramenta exclusiva alterada");
           state.activeTool = state.activeTool === id ? null : id;
         }
@@ -3404,6 +3404,14 @@
       function setHighlightShapesOpen(open) {
         highlightShapesMenu.hidden = !open;
         highlightToolButton.setAttribute("aria-expanded", String(Boolean(open)));
+      }
+
+      function resetHighlightShape() {
+        state.highlightShape = "path";
+        highlightShapeBadge.hidden = true;
+        highlightShapeBadge.replaceChildren();
+        highlightShapeButtons.forEach(button => button.setAttribute("aria-pressed", "false"));
+        highlightToolButton.setAttribute("aria-label", "Destacar quadrados — Traço livre. Segure para escolher uma forma.");
       }
 
       function selectHighlightShape(shape) {

@@ -12,7 +12,7 @@ function setup(){
     TOOL_DEFINITIONS:{ruler:{type:'priority'},heart:{type:'visual'},highlight:{type:'priority'},other:{type:'priority'}},toolButtons:buttons,
     masterMenu:{dataset:{},hidden:false,contains:()=>false},masterPanel:{inert:true,contains:()=>false},
     masterTrigger:{attrs:{},setAttribute(k,v){this.attrs[k]=v},focus(){}},masterModeCheckbox:{checked:true},
-    cancelHighlightToolPress(){},setHighlightShapesOpen(){},toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
+    cancelHighlightToolPress(){},setHighlightShapesOpen(){},resetHighlightShape(){ctx.state.highlightShape='path'},toolsMenu:{dataset:{}},toolsTrigger:{setAttribute(){},focus(){}},toolsPanel:{inert:true,contains:()=>false},
     document:{documentElement:{dataset:{}}},closeAssetExplorer(){},closeTokenTemplateEditor(){},closeStatusEditor(){},closeSceneEditor(){},setTokenDockOpen(){},setSceneDockOpen(){},syncSceneDockAvailability(){},syncTokenDockAvailability(){},workspaceCard:{contains:t=>t?.onMap===true},
     Element:class{},rulerSession:null,ownsHighlightPointer:()=>false,dispatchHighlightInput(){},clearGridHighlights(){ctx.cleared++},cleared:0,dispatchRulerInput(){},cancelWorkspaceGestures(){ctx.cancelled++},cancelled:0});
   for(const name of ['isMasterMode','syncMasterMenuUI','setMasterMenuOpen','setMasterMode','hasPriorityTool','syncToolsUI','setToolsOpen','toggleTool','blocksWorkspaceInput','ownsRulerPointer','interceptWorkspaceInput'])vm.runInContext(source(name),ctx);

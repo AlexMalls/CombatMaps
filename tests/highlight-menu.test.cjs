@@ -13,6 +13,13 @@ test('selection closes submenu, shows a miniature of the chosen icon and can res
  const {c}=setup();c.setHighlightShapesOpen(true);c.selectHighlightShape('circle');assert.equal(c.state.highlightShape,'circle');assert.equal(c.state.activeTool,'highlight');assert.equal(c.highlightShapesMenu.hidden,true);assert.equal(c.highlightShapeBadge.hidden,false);assert.equal(c.highlightShapeBadge.children[0].shape,'circle');assert.equal(c.highlightShapeButtons[1].attrs['aria-pressed'],'true');
  c.selectHighlightShape('circle');assert.equal(c.state.highlightShape,'path');assert.equal(c.highlightShapeBadge.hidden,true);assert.equal(c.highlightShapeBadge.children.length,0);
 });
+test('leaving highlight resets its shape and badge, while the visual heart preserves both',()=>{
+ const {c}=setup();c.TOOL_DEFINITIONS={highlight:{type:'priority'},ruler:{type:'priority'},heart:{type:'visual'}};c.state.visualTools=new Set();c.clearGridHighlights=()=>{};c.cancelWorkspaceGestures=()=>{};c.syncToolsUI=()=>{};
+ vm.runInContext(source('resetHighlightShape')+source('toggleTool'),c);
+ c.selectHighlightShape('circle');c.toggleTool('heart');assert.equal(c.state.highlightShape,'circle');assert.equal(c.highlightShapeBadge.hidden,false);
+ c.toggleTool('highlight');assert.equal(c.state.activeTool,null);assert.equal(c.state.highlightShape,'path');assert.equal(c.highlightShapeBadge.hidden,true);assert.equal(c.highlightShapeBadge.children.length,0);assert.ok(c.highlightShapeButtons.every(button=>button.attrs['aria-pressed']==='false'));assert.match(c.highlightToolButton.attrs['aria-label'],/Traço livre/);
+ c.toggleTool('highlight');assert.equal(c.state.highlightShape,'path');c.selectHighlightShape('cone');c.toggleTool('ruler');assert.equal(c.state.activeTool,'ruler');assert.equal(c.state.highlightShape,'path');assert.equal(c.highlightShapeBadge.hidden,true);
+});
 test('animation and secondary pointers cannot start a submenu hold',()=>{
  const {c,timers}=setup();c.beginHighlightToolPress({isPrimary:false,button:0});assert.equal(timers.size,0);c.state.isMoving=true;c.beginHighlightToolPress({isPrimary:true,button:0});assert.equal(timers.size,0);c.selectHighlightShape('cone');assert.equal(c.state.highlightShape,'path');
 });
