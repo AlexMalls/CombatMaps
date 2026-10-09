@@ -34,6 +34,7 @@
       --color-frame: #01484a;
       --token-dock-curve: 1rem;
       --token-dock-width: 32rem;
+      --token-dock-height: 6.5rem;
       --color-surface: #073d3d;
       --color-surface-raised: #0b4c49;
       --color-surface-inset: #062c2c;
@@ -1161,12 +1162,14 @@
     .token-dock {
       position: fixed; left: 50%; bottom: var(--frame-thickness);
       width: min(var(--token-dock-width), calc(100vw - 8rem));
-      min-height: 6.5rem;
-      padding: var(--space-2) calc(var(--token-dock-curve) + var(--space-2));
+      /* A base fica fixa: a superfície se desdobra e revela o conteúdo por baixo. */
+      height: 0;
+      padding: 0;
+      overflow: hidden;
       z-index: calc(var(--z-controls) + 3);
-      transform: translate(-50%, calc(100% + var(--frame-thickness)));
-      opacity: 0; visibility: hidden; pointer-events: none;
-      transition: transform var(--duration-menu) var(--ease-interface), opacity var(--duration-normal), visibility 0s var(--duration-menu);
+      transform: translateX(-50%);
+      visibility: hidden; pointer-events: none;
+      transition: height var(--duration-menu) var(--ease-interface), visibility 0s var(--duration-menu);
     }
     .token-dock::before {
       content: ""; position: absolute; inset: 0; z-index: -1;
@@ -1183,8 +1186,8 @@
       -webkit-mask: radial-gradient(var(--token-dock-curve) at var(--token-dock-curve) 0, transparent 98%, #000 101%) calc(-1 * var(--token-dock-curve)) 100% / 100% var(--token-dock-curve) repeat-x, conic-gradient(#000 0 0) padding-box;
       mask: radial-gradient(var(--token-dock-curve) at var(--token-dock-curve) 0, transparent 98%, #000 101%) calc(-1 * var(--token-dock-curve)) 100% / 100% var(--token-dock-curve) repeat-x, conic-gradient(#000 0 0) padding-box;
     }
-    .token-dock[data-open="true"] { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-    .token-dock__list { display: flex; align-items: center; gap: var(--space-3); overflow-x: auto; min-height: 5.5rem; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x; }
+    .token-dock[data-open="true"] { height: var(--token-dock-height); visibility: visible; pointer-events: auto; transition-delay: 0s; }
+    .token-dock__list { position: absolute; bottom: var(--space-2); left: calc(var(--token-dock-curve) + var(--space-2)); right: calc(var(--token-dock-curve) + var(--space-2)); display: flex; align-items: center; gap: var(--space-3); overflow-x: auto; min-height: 5.5rem; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x; }
     .token-dock__item[aria-disabled="true"] { opacity: .35; cursor: not-allowed; }
     .token-dock__item { flex: 0 0 auto; flex-direction: column; width: 4.75rem; min-height: 5rem; padding: var(--space-1); font-size: 0.7rem; touch-action: none; user-select: none; cursor: grab; }
     .token-dock__item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
