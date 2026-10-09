@@ -88,7 +88,7 @@ test('outside click and Escape close panels, while clicks inside and long-releas
   // The next priority-listener registration is the end of this independent dismiss block.
   const stop=script.indexOf('      ["pointerdown",',start);
   vm.runInContext(script.slice(start,stop),c);
-  c.listeners.get('click')({target:{closest:selector=>selector==='.token-status'?{}:null}});assert.equal(panels.size,1);
+  c.listeners.get('click')({target:{closest:selector=>selector.includes('.token-status')?{}:null}});assert.equal(panels.size,1);
   c.statusLongClickToken=c.a;c.statusLongClickUntil=1600;
   c.listeners.get('click')({target:{closest:selector=>selector.includes('data-type')?c.a:null}});assert.equal(panels.size,1);
   c.listeners.get('click')({target:{closest:()=>null}});assert.equal(panels.size,0);
