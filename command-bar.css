@@ -91,3 +91,10 @@
 .command-bar[data-orientation="side"] .command-bar__token img { flex: 0 0 1.4rem; width: 1.4rem; height: 1.4rem; }
 .command-bar[data-orientation="side"] .command-bar__token-data strong { font-size: .6rem; }
 .command-bar[data-orientation="side"] .command-bar__token-data { font-size: .55rem; }
+.command-bar[data-orientation="side"] .command-bar__header { grid-template-columns: minmax(0, 1fr) auto; }
+.command-bar[data-orientation="side"] .command-bar__options { min-width: 0; width: 100%; }
+.command-bar[data-orientation="side"] .command-bar__opacity input { flex: 1; width: 0; }
+.command-bar[data-orientation="side"] .command-bar__action { display: grid; grid-template-columns: minmax(0, 1fr) 3.5rem; min-width: 0; }
+.command-bar[data-orientation="side"] .command-bar__action:last-child { grid-template-columns: minmax(0, 1fr) 4.5rem; }
+.command-bar[data-orientation="side"] #command-options input:not([type="checkbox"]):not([type="range"]),
+.command-bar[data-orientation="side"] #command-options select { width: 100%; min-height: 1.75rem; height: 1.75rem; padding: .2rem .25rem; font-size: .6rem; }
