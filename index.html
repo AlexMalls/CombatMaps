@@ -1678,14 +1678,13 @@
           <button id="debug-close" type="button">Fechar</button>
         </footer>
       </dialog>
-    </section>
-  </main>
-
       <svg id="command-links" class="command-bar__links" aria-hidden="true" hidden><defs><linearGradient id="command-spectrum" class="magic-spectrum" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%"/><stop offset="33%"/><stop offset="67%"/><stop offset="100%"/></linearGradient></defs><g id="command-links-group"></g></svg>
       <section id="command-bar" class="command-bar" data-open="false" data-orientation="top" aria-label="Barra de comando" aria-hidden="true" inert>
         <div class="command-bar__inner">
           <header class="command-bar__header">
             <h2 class="command-bar__title">Comando</h2><span id="command-count" class="command-bar__count">0 selecionados</span>
+            <button id="command-options-toggle" class="command-bar__options-toggle" type="button" aria-expanded="false" aria-controls="command-options">Opções</button>
+            <div id="command-options" class="command-bar__options">
             <label class="command-bar__check"><input id="command-show-links" type="checkbox" checked>Mostrar vínculos</label>
             <label class="command-bar__opacity">Opacidade<input id="command-link-opacity" type="range" min="0" max="100" step="1" value="100" aria-label="Opacidade dos vínculos rainbow"><output id="command-link-opacity-value" for="command-link-opacity">100%</output></label>
             <div class="command-bar__controls">
@@ -1693,10 +1692,14 @@
               <div class="command-bar__action"><button type="button" data-command-action="heal" disabled>Cura</button><input id="command-heal-value" type="text" inputmode="numeric" pattern="[0-9]*" value="1000" maxlength="12" aria-label="Valor de cura" autocomplete="off"></div>
               <div class="command-bar__action"><button type="button" data-command-action="status" disabled>Aplicar status</button><select id="command-status-value" aria-label="Status para aplicar"><option value="">Escolher status</option></select></div>
             </div>
+            </div>
           </header>
           <div id="command-list" class="command-bar__list" aria-label="Tokens da cena"></div>
         </div>
       </section>
+    </section>
+  </main>
+
       <p id="command-message" class="sr-only" role="status" aria-live="polite"></p>
       <section id="token-dock" class="token-dock" data-open="false" aria-label="Modelos de token para adicionar ao mapa" inert>
         <div id="token-dock-list" class="token-dock__list"></div>

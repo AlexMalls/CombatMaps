@@ -1,5 +1,5 @@
 /* Componentes da barra de comando — toda a aparência depende da paleta geral. */
-:root { --command-height: 7rem; --command-width: 15rem; --command-curve: 1rem; }
+:root { --command-height: 7rem; --command-width: 10.5rem; --command-side-top: 4.5rem; --command-side-height: min(32rem, calc(100dvh - 9rem)); --command-curve: 1rem; }
 .command-bar {
   position: fixed; top: var(--frame-thickness); left: 50%;
   width: calc(100vw - 9rem); height: 0; transform: translateX(-50%);
@@ -42,9 +42,9 @@
 .command-bar__links { position: fixed; inset: var(--frame-thickness); width: calc(100% - 2 * var(--frame-thickness)); height: calc(100% - 2 * var(--frame-thickness)); overflow: hidden; pointer-events: none; z-index: calc(var(--z-controls) + 1); }
 .command-bar__link { stroke-width: var(--token-status-link-width); transition: opacity 100ms linear; }
 .command-bar__outline { stroke-width: var(--token-status-outline-width); }
-.command-bar[data-orientation="side"] { top: 4.5rem; bottom: 4.5rem; left: var(--frame-thickness); width: 0; height: auto; transform: none; transition: width var(--duration-menu) var(--ease-interface), visibility 0s var(--duration-menu); }
+.command-bar[data-orientation="side"] { top: var(--command-side-top); bottom: auto; left: var(--frame-thickness); width: 0; height: var(--command-side-height); transform: none; transition: width var(--duration-menu) var(--ease-interface), visibility 0s var(--duration-menu); }
 .command-bar[data-orientation="side"][data-open="true"] { width: min(var(--command-width), calc(100vw - 5rem)); }
-.command-bar[data-orientation="side"]::before { border: 0; border-block: var(--command-curve) solid transparent; border-radius: 0 var(--command-curve) var(--command-curve) 0; background-position: left calc((100vw - var(--frame-texture-width)) / 2 - var(--frame-thickness)) center; -webkit-mask: none; mask: none; }
+.command-bar[data-orientation="side"]::before { border: 0; border-block: var(--command-curve) solid transparent; border-radius: 0 var(--command-curve) var(--command-curve) 0; background-position: left calc((100vw - var(--frame-texture-width)) / 2 - var(--frame-thickness)) top calc((100dvh - var(--frame-texture-height)) / 2 - var(--command-side-top)); -webkit-mask: none; mask: none; }
 .command-bar[data-orientation="side"] .command-bar__inner { inset: 1rem auto 1rem .75rem; width: min(calc(var(--command-width) - 1.5rem), calc(100vw - 6.5rem)); height: auto; padding: 0; }
 .command-bar[data-orientation="side"] .command-bar__list { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
 .command-bar[data-orientation="side"] .command-bar__token { flex: 0 0 auto; width: 100%; min-height: 3.5rem; }
@@ -70,3 +70,24 @@
 .command-bar__opacity input { width: 4rem; min-width: 0; height: 1.5rem; }
 .command-bar__opacity output { min-width: 2rem; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 @media (min-width:701px) and (max-width:1100px) { :root { --command-height: 9rem; } }
+
+/* Lateral: lista estreita; controles secundários ficam recolhidos. */
+.command-bar__options { display: contents; }
+.command-bar__options-toggle { display: none; }
+.command-bar[data-orientation="side"] .command-bar__inner { inset: .65rem auto .65rem .5rem; width: min(calc(var(--command-width) - 1rem), calc(100vw - 6rem)); }
+.command-bar[data-orientation="side"] .command-bar__header { display: grid; grid-template-columns: 1fr auto; gap: .3rem; align-content: start; }
+.command-bar[data-orientation="side"] .command-bar__count { font-size: .6rem; }
+.command-bar[data-orientation="side"] .command-bar__options-toggle { display: block; grid-column: 1 / -1; min-height: 1.6rem; padding: .2rem .35rem; font-size: .65rem; text-align: left; }
+.command-bar[data-orientation="side"] .command-bar__options-toggle::after { content: "⌄"; float: right; }
+.command-bar[data-orientation="side"] .command-bar__options-toggle[aria-expanded="true"]::after { content: "⌃"; }
+.command-bar[data-orientation="side"] .command-bar__options { display: none; grid-column: 1 / -1; }
+.command-bar[data-orientation="side"][data-options-open="true"] .command-bar__options { display: grid; gap: .4rem; }
+.command-bar[data-orientation="side"] .command-bar__controls { display: grid; gap: .3rem; }
+.command-bar[data-orientation="side"] .command-bar__action { gap: .2rem; }
+.command-bar[data-orientation="side"] .command-bar__action input { flex-basis: 3rem; width: 3rem; }
+.command-bar[data-orientation="side"] .command-bar__action select { width: 5.2rem; font-size: .6rem; }
+.command-bar[data-orientation="side"] .command-bar__action button { padding-inline: .2rem; font-size: .6rem; white-space: nowrap; }
+.command-bar[data-orientation="side"] .command-bar__token { gap: .25rem; padding-inline: .3rem; }
+.command-bar[data-orientation="side"] .command-bar__token img { flex: 0 0 1.4rem; width: 1.4rem; height: 1.4rem; }
+.command-bar[data-orientation="side"] .command-bar__token-data strong { font-size: .6rem; }
+.command-bar[data-orientation="side"] .command-bar__token-data { font-size: .55rem; }

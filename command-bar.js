@@ -217,6 +217,12 @@
     list.addEventListener('scroll',schedule,{passive:true});
     bar.addEventListener('transitionrun',schedule);bar.addEventListener('transitionend',schedule);
     window.addEventListener('resize',schedule);
+    const optionsToggle = document.getElementById('command-options-toggle');
+    optionsToggle.addEventListener('click', () => {
+      const expanded = optionsToggle.getAttribute('aria-expanded') !== 'true';
+      optionsToggle.setAttribute('aria-expanded', String(expanded));
+      bar.dataset.optionsOpen = String(expanded); schedule();
+    });
     function syncOpacity() {
       const value = normalizeOpacity(opacity.value);
       group.style.opacity = String(value);
