@@ -2604,6 +2604,63 @@
         return token;
       }
 
+      // Clipboard interno: instantâneos independentes, com novos IDs ao colar.
+      let tokenClipboard = [];
+      function copySelectedTokens() {
+        if (state.touchMode || state.isMoving || hasPriorityTool()) return false;
+        const selected = getSelectedTokensInNumberOrder();
+        const sources = selected.length ? selected : (commandBar?.getSelected() || []);
+        const snapshots = sources.filter(token => token.isConnected && getTokenInfo(token)?.life > 0).map(token => ({
+          typeId: getTokenInfo(token).typeId, cell: { ...getTokenGridState(token) },
+          life: getTokenInfo(token).life, maxLife: getTokenInfo(token).maxLife, status: getTokenInfo(token).status
+        }));
+        if (!snapshots.length) return false;
+        tokenClipboard = snapshots;
+        tokenDockStatus.textContent = `${snapshots.length} token(s) copiado(s).`;
+        return true;
+      }
+
+      function findTokenPasteTargets(items, columns, rows, isFree) {
+        if (!items.length) return null;
+        const minCol = Math.min(...items.map(item => item.cell.col)), minRow = Math.min(...items.map(item => item.cell.row));
+        const width = Math.max(...items.map(item => item.cell.col + item.cell.size)) - minCol;
+        const height = Math.max(...items.map(item => item.cell.row + item.cell.size)) - minRow;
+        const origins = [];
+        for (let row = 0; row <= rows - height; row++) for (let col = 0; col <= columns - width; col++) {
+          origins.push({ col, row, distance: (col - minCol - 1) ** 2 + (row - minRow - 1) ** 2 });
+        }
+        origins.sort((a, b) => a.distance - b.distance || a.row - b.row || a.col - b.col);
+        for (const origin of origins) {
+          const targets = items.map(item => ({ col: origin.col + item.cell.col - minCol, row: origin.row + item.cell.row - minRow, size: item.cell.size }));
+          if (targets.every(isFree)) return targets;
+        }
+        return null;
+      }
+
+      function pasteCopiedTokens() {
+        if (state.touchMode || !isMasterMode() || state.isMoving || hasPriorityTool() || !tokenClipboard.length) return false;
+        if (tokenClipboard.some(item => !TOKEN_TYPES[item.typeId])) return false;
+        const origin = getGridOrigin();
+        const targets = findTokenPasteTargets(tokenClipboard,
+          Math.floor((workspaceLayers.clientWidth - origin.x) / state.size),
+          Math.floor((workspaceLayers.clientHeight - origin.y) / state.size), canPlaceTokenFootprint);
+        if (!targets) { tokenDockStatus.textContent = "Não há espaço livre para colar este grupo."; return true; }
+        cancelWorkspaceGestures("colagem de tokens");
+        const items = tokenClipboard.map((snapshot, index) => {
+          const cell = targets[index], token = buildTokenInstance(snapshot.typeId, cell);
+          token.dataset.gridSize = String(cell.size);
+          Object.assign(getTokenInfo(token), { life: snapshot.life, maxLife: snapshot.maxLife, status: snapshot.status });
+          workspaceLayers.append(token); tokens.push(token); updateTokenHealthVisuals(token);
+          return { token, cell: { ...cell } };
+        });
+        movementRedoHistory.length = 0;
+        movementHistory.push({ kind: "spawn-group", items });
+        if (movementHistory.length > MOVEMENT_HISTORY_LIMIT) movementHistory.shift();
+        updateAllTokens(); selectTokenSet(items.map(item => item.token)); updateMovementHistoryUI();
+        tokenDockStatus.textContent = `${items.length} token(s) colado(s).`;
+        return true;
+      }
+
       function getDockDropAtClient(typeId, clientX, clientY) {
         const hit = document.elementFromPoint(clientX, clientY);
         if (!hit || !cameraViewport.contains(hit) || hit.closest(".corner-settings, .token-dock, .token-status, .token-action-menu, dialog")) return null;
@@ -4361,6 +4418,15 @@
         }
 
         const entry = movementHistory.pop();
+        if (entry.kind === "spawn-group") {
+          cancelWorkspaceGestures("colagem desfeita");
+          entry.items.forEach(({ token }) => {
+            deselectToken(token); closeTokenStatus(token); cancelTokenDeath(token);
+            const index = tokens.indexOf(token); if (index >= 0) tokens.splice(index, 1);
+            token.remove();
+          });
+          movementRedoHistory.push(entry); updateAllTokens(); updateMovementHistoryUI(); return true;
+        }
         if (entry.kind === "spawn") {
           cancelWorkspaceGestures("adição de token desfeita");
           deselectToken(entry.token);
@@ -4443,6 +4509,16 @@
         }
 
         const entry = movementRedoHistory.pop();
+        if (entry.kind === "spawn-group") {
+          if (!entry.items.every(item => canPlaceTokenFootprint(item.cell))) {
+            movementRedoHistory.push(entry); updateMovementHistoryUI(); return false;
+          }
+          entry.items.forEach(({ token, cell }) => {
+            Object.assign(token.dataset, { gridCol: String(cell.col), gridRow: String(cell.row), gridSize: String(cell.size) });
+            workspaceLayers.append(token); tokens.push(token);
+          });
+          movementHistory.push(entry); updateAllTokens(); updateMovementHistoryUI(); return true;
+        }
         if (entry.kind === "spawn") {
           if (!canPlaceTokenFootprint(entry.cell)) {
             movementRedoHistory.push(entry);
@@ -6879,6 +6955,11 @@
         const editableTarget = event.target instanceof Element && Boolean(
           event.target.closest("input, textarea, select, [contenteditable='true']")
         );
+        if (!editableTarget && ["c", "v"].includes(event.key.toLowerCase()) && !document.querySelector("dialog[open]") && !event.altKey && !event.shiftKey && (event.ctrlKey || event.metaKey)) {
+          const key = event.key.toLowerCase();
+          if (key === "c" && copySelectedTokens()) { event.preventDefault(); return; }
+          if (key === "v" && pasteCopiedTokens()) { event.preventDefault(); return; }
+        }
         const undoMovementShortcut = !event.altKey && !event.shiftKey &&
           (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
         if (undoMovementShortcut && !editableTarget) {
