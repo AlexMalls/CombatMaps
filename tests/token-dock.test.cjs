@@ -4,7 +4,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const i=script.indexOf(`      function ${name}(`);assert.ok(i>=0,name);return script.slice(i,script.indexOf('\n      }',i)+8);}
 function context(extra={}){
- const c=vm.createContext({getCameraScale:()=>c.state.cameraZoom,state:{size:48,cameraZoom:1,cameraX:0,cameraY:0,isMoving:false,tokenDockOpen:true},
+ const c=vm.createContext({uniqueAssetId:prefix=>prefix,getCameraScale:()=>c.state.cameraZoom,state:{size:48,cameraZoom:1,cameraX:0,cameraY:0,isMoving:false,tokenDockOpen:true},
   TOKEN_TYPES:{soldiers:{id:'soldiers',name:'Soldados',gridSize:1,image:'soldiers.png',maxLife:10000,status:'Normal'}},
   tokenData:new Map([['soldados-01',{}]]),nextTokenInstanceId:1,tokens:[],gridPointMarkers:[],
   workspaceLayers:{clientWidth:480,clientHeight:480},getGridOrigin:()=>({x:0,y:0}),

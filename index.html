@@ -1590,7 +1590,7 @@
         <p id="block-sensitivity-help" class="sr-only">De 1 a 3 vezes. Valores maiores projetam o grupo mais longe com o mesmo movimento do mouse ou dos dedos.</p>
       </fieldset>
       <fieldset class="app-settings__control project-settings"><legend>Projeto</legend>
-        <label class="ui-check"><span>Salvamento automático (10 s)</span><input id="project-autosave" type="checkbox" checked></label>
+        <label class="ui-check"><span>Sincronização automática</span><input id="project-autosave" type="checkbox" checked></label>
         <button id="project-save" type="button">Salvar agora</button><button id="project-reload" type="button">Recarregar da nuvem</button>
         <section class="project-settings__backup" aria-label="Backup"><button id="project-export" type="button">Exportar projeto</button><button id="project-import" type="button">Importar projeto</button></section>
         <input id="project-import-file" type="file" accept="application/json,.json" hidden>
@@ -1874,6 +1874,7 @@
   <script src="fullscreen-controller.js"></script>
   <script src="media-library.js"></script>
   <script src="project-store.js"></script>
+  <script src="realtime-project.js"></script>
   <script src="firebase-project.js"></script>
   <script src="project-controller.js"></script>
   <script src="command-bar.js"></script>
@@ -2571,10 +2572,11 @@
         return canPlaceTokenFootprint(candidate) ? candidate : null;
       }
 
+      function uniqueAssetId(prefix) { return `${prefix}~${crypto.randomUUID()}`; }
       function nextTokenId(typeId) {
         const prefix = TOKEN_TYPES[typeId].instancePrefix || typeId;
         let id;
-        do { id = `${prefix}-${String(nextTokenInstanceId++).padStart(2, "0")}`; } while (tokenData.has(id));
+        do { id = uniqueAssetId(`${prefix}-${String(nextTokenInstanceId++).padStart(2, "0")}`); } while (tokenData.has(id));
         return id;
       }
 
@@ -2588,7 +2590,7 @@
         Object.assign(token.dataset, { type: "token", tokenId: id, tokenType: typeId, gridCol: String(cell.col), gridRow: String(cell.row), gridSize: String(type.gridSize), selected: "false" });
         token.tabIndex = 0;
         token.setAttribute("role", "button");
-        token.setAttribute("aria-label", `${type.name} ${id}. Clique para selecionar; segure para ver o status.`);
+        token.setAttribute("aria-label", `${type.name} ${id.split("~")[0]}. Clique para selecionar; segure para ver o status.`);
         const image = document.createElement("img");
         image.className = "token__image";
         image.src = type.image;
@@ -2614,7 +2616,7 @@
 
       function ensureWorkspaceScene() {
         if (!activeSceneId) {
-          const id = `scene-${nextSceneId++}`;
+          const id = uniqueAssetId(`scene-${nextSceneId++}`);
           scenes.push({ id, name: "Cena sem título", canvas: { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) }, grid: getSceneGridSettings(), backgroundUrl: "", fileName: "", fileSize: 0, imageRect: null, workspaceTokens: tokens.slice() });
           activeSceneId = id; renderSceneDock();
         }
@@ -3098,10 +3100,10 @@
           tokenTemplateError.textContent = "A vida inicial deve ser um inteiro entre 1 e 1.000.000.000.";
           return false;
         }
-        const id = draft.typeId || `custom-${nextTokenTypeId++}`;
+        const id = draft.typeId || uniqueAssetId(`custom-${nextTokenTypeId++}`);
         const previous = TOKEN_TYPES[id];
         const name = tokenTemplateName.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || "Token";
-        TOKEN_TYPES[id] = Object.freeze({ id, instancePrefix: previous?.instancePrefix || id, name, image: draft.image, fileName: draft.fileName, fileSize: draft.fileSize, gridSize: tokenTemplateSettings.size, maxLife, status: tokenTemplateStatus.value.trim() || "Normal" });
+        TOKEN_TYPES[id] = Object.freeze({ id, instancePrefix: previous?.instancePrefix || id.split("~")[0], name, image: draft.image, fileName: draft.fileName, fileSize: draft.fileSize, gridSize: tokenTemplateSettings.size, maxLife, status: tokenTemplateStatus.value.trim() || "Normal" });
         if (draft.ownsImage) explorerState.fileSizes.set(draft.image, Promise.resolve(draft.fileSize));
         draft.image = ""; // A URL pertence agora ao catálogo e às instâncias do token.
         closeTokenTemplateEditor();
@@ -3445,7 +3447,7 @@
         const existing = draft.assetId ? assets.find(item => item.id === draft.assetId) : null;
         if (draft.assetId && !existing) return;
         const number = existing ? null : category === "maps" ? nextMapId++ : nextSceneId++;
-        const updated = { id: existing?.id || `${category === "maps" ? "map" : "scene"}-${number}`, name: sceneNameInput.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || existing?.name || `${category === "maps" ? "Mapa" : "Cena"} ${number}`, canvas: { ...draft.canvas }, grid: { ...sceneGridSettings }, backgroundUrl: draft.backgroundUrl, fileName: draft.fileName, fileSize: draft.fileSize, imageRect: draft.imageRect ? { ...draft.imageRect } : null };
+        const updated = { id: existing?.id || uniqueAssetId(`${category === "maps" ? "map" : "scene"}-${number}`), name: sceneNameInput.value.trim() || draft.fileName.replace(/\.[^.]+$/, "") || existing?.name || `${category === "maps" ? "Mapa" : "Cena"} ${number}`, canvas: { ...draft.canvas }, grid: { ...sceneGridSettings }, backgroundUrl: draft.backgroundUrl, fileName: draft.fileName, fileSize: draft.fileSize, imageRect: draft.imageRect ? { ...draft.imageRect } : null };
         if (existing) Object.assign(existing, updated); else assets.push(updated);
         // Não revogar imagens que pertencem a um registro salvo.
         draft.backgroundUrl = "";
@@ -3524,7 +3526,7 @@
         if (!editor.open) return;
         if (!name.value.trim()) { name.focus(); return; }
         const existing = statusTypes.find(item => item.id === editor.dataset.editId);
-        const value = { id: existing?.id || `status-${nextStatusId++}`, name: name.value.trim(), description: document.getElementById("status-description").value.trim() };
+        const value = { id: existing?.id || uniqueAssetId(`status-${nextStatusId++}`), name: name.value.trim(), description: document.getElementById("status-description").value.trim() };
         if (existing) Object.assign(existing, value); else statusTypes.push(value);
         if (typeof commandBar !== "undefined") commandBar?.refresh();
         editor.close(); explorerState.category = "status"; renderAssetExplorerContent();
@@ -7238,7 +7240,7 @@
       commandBar = CommandBar.create({
         getTokens: () => tokens,
         getInfo: getTokenInfo,
-        getName: token => { const info = getTokenInfo(token); return `${TOKEN_TYPES[info?.typeId]?.name || "Token"} · ${info?.id || ""}`; },
+        getName: token => { const info = getTokenInfo(token); return `${TOKEN_TYPES[info?.typeId]?.name || "Token"} · ${info?.id?.split("~")[0] || ""}`; },
         getStatuses: () => [...new Set(["Normal", ...statusTypes.map(status => status.name)])],
         isMoving: () => state.isMoving,
         clearMovementSelection: () => { if (hasSelectedToken() && !state.isMoving) clearTokenSelection(); },
@@ -7306,7 +7308,7 @@
         setMasterMode(true);
         if (project.activeSceneId) loadScene(project.activeSceneId);
         else syncSceneWorld();
-        const settings = project.settings;
+        const settings = { ...project.settings, ...(scenes.find(scene => scene.id === activeSceneId)?.grid || {}) };
         if (typeof settings.autosave === "boolean") document.getElementById("project-autosave").checked = settings.autosave;
         setVisible(settings.visible ?? true); setAbsolute(settings.absolute ?? false);
         distanceControl.set(settings.distance ?? 1.5); opacityControl.set(settings.opacity ?? 5); sizeControl.set(settings.size ?? 48);
@@ -7321,18 +7323,85 @@
         if (typeof settings.masterMode === "boolean") setMasterMode(settings.masterMode);
         if (typeof settings.debugEnabled === "boolean") setDebugEnabled(settings.debugEnabled);
         if (Number.isFinite(settings.blockSensitivity)) blockSensitivityControl.set(settings.blockSensitivity);
-        const position = settings.autosave = document.getElementById("project-autosave").checked;
-        settings.commandPosition === "side" ? "side" : "top";
+        const position = settings.commandPosition === "side" ? "side" : "top";
         document.querySelectorAll('[name="command-position"]').forEach(input => input.checked = input.value === position); commandBar.setOrientation(position);
         if (Number.isFinite(settings.linkOpacity)) { const opacity = document.getElementById("command-link-opacity"); opacity.value = String(settings.linkOpacity); opacity.dispatchEvent(new Event("input")); }
         if (typeof settings.showLinks === "boolean") { const links = document.getElementById("command-show-links"); links.checked = settings.showLinks; links.dispatchEvent(new Event("change")); }
         renderTokenDock(); renderSceneDock(); renderAssetExplorerContent(); renderActiveSceneBackground(); updateAllTokens(); updateMovementHistoryUI();
       }
+      function realtimeLocalSettings() {
+        const settings = snapshotProject().settings;
+        return Object.fromEntries(Object.entries(settings).filter(([key]) => !["visible", "absolute", "distance", "opacity", "size"].includes(key)));
+      }
+      function createPersistedToken(saved) {
+        const token = buildTokenInstance(saved.typeId, saved), temporaryId = tokenIds.get(token);
+        tokenData.delete(temporaryId); tokenIds.delete(token);
+        token.id = `token-${saved.id}`; token.dataset.tokenId = saved.id; token.dataset.gridSize = String(saved.size);
+        Object.assign(registerTokenData(token), { life: saved.life, maxLife: saved.maxLife, status: saved.status });
+        updateTokenHealthVisuals(token);
+        return token;
+      }
+      function applyRealtimeProject(input) {
+        const incoming = ProjectStore.validateProject(input), before = snapshotProject();
+        const local = realtimeLocalSettings();
+        const same = (a, b) => JSON.stringify(RealtimeProject.canonical(a)) === JSON.stringify(RealtimeProject.canonical(b));
+        const oldScene = scenes.find(scene => scene.id === activeSceneId), newScene = incoming.scenes.find(scene => scene.id === incoming.activeSceneId);
+        if (incoming.activeSceneId !== activeSceneId || !same(oldScene?.canvas, newScene?.canvas)) {
+          if (incoming.activeSceneId !== activeSceneId) { delete local.cameraZoom; delete local.cameraWorldCenter; }
+          restoreProject({ ...incoming, settings: { ...incoming.settings, ...local } });
+          return;
+        }
+        const catalogsChanged = !same(before.types, incoming.types) || !same(before.statuses, incoming.statuses) || !same(before.maps, incoming.maps);
+        const units = new Map([...tokens, ...scenes.flatMap(scene => scene.workspaceTokens || []), ...maps.flatMap(scene => scene.workspaceTokens || [])].map(token => [getTokenInfo(token)?.id, token]));
+        const removedTypes = Object.keys(TOKEN_TYPES).filter(id => !incoming.types.some(type => type.id === id));
+        removedTypes.forEach(id => delete TOKEN_TYPES[id]);
+        incoming.types.forEach(type => TOKEN_TYPES[type.id] = Object.freeze({ ...type, image: cloudImageUrl(type.image) }));
+        statusTypes.splice(0, statusTypes.length, ...incoming.statuses);
+        const wanted = new Set();
+        function updateScene(saved, existing) {
+          const { tokens: savedTokens = [], ...metadata } = saved;
+          const workspaceTokens = savedTokens.filter(value => value.life > 0).map(value => {
+            wanted.add(value.id);
+            let token = units.get(value.id);
+            if (token && getTokenInfo(token)?.typeId !== value.typeId) { closeTokenStatus(token); token.remove(); tokenData.delete(value.id); tokenIds.delete(token); token = null; }
+            if (!token) token = createPersistedToken(value);
+            Object.assign(token.dataset, { gridCol: String(value.col), gridRow: String(value.row), gridSize: String(value.size) });
+            Object.assign(getTokenInfo(token), { life: value.life, maxLife: value.maxLife, status: value.status });
+            const image = token.querySelector(".token__image"), source = TOKEN_TYPES[value.typeId].image;
+            if (image.getAttribute("src") !== source) image.src = source;
+            updateTokenHealthVisuals(token);
+            const panel = tokenStatusPanels.get(value.id); if (panel) panel.status.textContent = value.status;
+            return token;
+          });
+          return Object.assign(existing || {}, metadata, { backgroundUrl: cloudImageUrl(saved.backgroundUrl), workspaceTokens });
+        }
+        const nextScenes = incoming.scenes.map(scene => updateScene(scene, scenes.find(current => current.id === scene.id)));
+        const nextMaps = incoming.maps.map(scene => updateScene(scene, maps.find(current => current.id === scene.id)));
+        for (const [id, token] of units) if (!wanted.has(id)) { cancelTokenDeath(token); closeTokenStatus(token); token.remove(); tokenData.delete(id); tokenIds.delete(token); }
+        scenes.splice(0, scenes.length, ...nextScenes); maps.splice(0, maps.length, ...nextMaps);
+        const active = scenes.find(scene => scene.id === activeSceneId);
+        const nextTokens = active?.workspaceTokens || [];
+        const previousPositions = before.scenes.find(scene => scene.id === activeSceneId)?.tokens?.map(({ id, col, row, size }) => ({ id, col, row, size })) || [];
+        const nextPositions = (newScene?.tokens || []).map(({ id, col, row, size }) => ({ id, col, row, size }));
+        if (!same(previousPositions, nextPositions)) { clearAllGridPoints(); clearMovementHistory("atualização compartilhada"); }
+        tokens.splice(0, tokens.length, ...nextTokens);
+        tokens.forEach(token => { if (token.parentElement !== workspaceLayers) workspaceLayers.append(token); });
+        state.selectionOrder = state.selectionOrder.filter(token => tokens.includes(token));
+        state.moveSelectionOrder = state.moveSelectionOrder.filter(token => tokens.includes(token));
+        const settings = { ...incoming.settings, ...(newScene?.grid || {}) };
+        setVisible(settings.visible ?? true); setAbsolute(settings.absolute ?? false);
+        distanceControl.set(settings.distance ?? 1.5); opacityControl.set(settings.opacity ?? 5); sizeControl.set(settings.size ?? 48);
+        syncSceneWorld(); updateAllTokens(); renderActiveSceneBackground(); updateMovementHistoryUI();
+        if (catalogsChanged) renderTokenDock();
+        if (!same(before.scenes, incoming.scenes)) renderSceneDock();
+        if (assetExplorer.open) renderAssetExplorerContent();
+        commandBar?.refresh();
+      }
       let persistencePointerDown = false;
       document.addEventListener("pointerdown", () => { persistencePointerDown = true; }, true);
       ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => { persistencePointerDown = false; }, true));
       window.addEventListener("blur", () => { persistencePointerDown = false; });
-      const bridge = { snapshot: snapshotProject, restore: restoreProject, empty: emptyProject, stable: () => !state.isMoving && !persistencePointerDown, setLoading: loading => { workspaceLayers.inert = loading; assetExplorer.inert = loading; tokenDock.inert = loading || !state.tokenDockOpen; sceneDock.inert = loading || !state.sceneDockOpen; } };
+      const bridge = { snapshot: snapshotProject, restore: restoreProject, update: applyRealtimeProject, empty: emptyProject, canReceive: () => !tokenTemplateEditor.open && !sceneEditor.open && !document.getElementById("status-editor").open, stable: () => !state.isMoving && !persistencePointerDown, setLoading: loading => { workspaceLayers.inert = loading; assetExplorer.inert = loading; tokenDock.inert = loading || !state.tokenDockOpen; sceneDock.inert = loading || !state.sceneDockOpen; } };
       ProjectController.start(bridge).catch(error => { document.getElementById("project-save-state").textContent = `Não foi possível recuperar o projeto: ${error.message}`; });
 
       // Integração opcional com agentes em navegadores que suportam WebMCP.

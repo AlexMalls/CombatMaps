@@ -4,7 +4,7 @@ function source(name){const i=script.indexOf(`      function ${name}(`);assert.o
 function setup(){
  const revoked=[],images=[];let seq=0;
  class Image{constructor(){images.push(this);this.naturalWidth=100;this.naturalHeight=200}}
- const c=vm.createContext({Math,Object,Promise,Image,URL:{createObjectURL:f=>`blob:${++seq}:${f.name}`,revokeObjectURL:url=>revoked.push(url)},
+ const c=vm.createContext({uniqueAssetId:prefix=>prefix,Math,Object,Promise,Image,URL:{createObjectURL:f=>`blob:${++seq}:${f.name}`,revokeObjectURL:url=>revoked.push(url)},
   isMasterMode:()=>true,assetExplorer:{open:true},tokenTemplateEditor:{open:false,showModal(){this.open=true},close(){this.open=false}},
   tokenTemplateLife:{value:'10000'},tokenTemplateStatus:{value:'Normal'},tokenTemplateEditImage:{},tokenTemplateTitle:{},tokenTemplateName:{value:''},tokenTemplatePicker:{value:''},tokenTemplatePreview:{removeAttribute(){delete this.src}},tokenTemplateEmpty:{},tokenTemplateFile:{},tokenTemplateError:{},tokenTemplateConfirm:{},
   tokenTemplateState:{draft:null,pendingUrl:null,loadVersion:0},tokenTemplateSettings:{size:1},tokenTemplateSizeControl:{set(v){c.tokenTemplateSettings.size=v},commit(){c.tokenTemplateSettings.size=Math.max(1,Math.min(10,Math.round(c.tokenTemplateSettings.size))) }},

@@ -1,163 +1,67 @@
 (function(root){
  'use strict';
- function localDatabase(){return new Promise((resolve,reject)=>{const r=indexedDB.open('combatmaps-projects',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
- const database=localDatabase();
- async function cache(key,value){const db=await database;return new Promise((resolve,reject)=>{const tx=db.transaction('projects',value===undefined?'readonly':'readwrite'),store=tx.objectStore('projects');const r=value===undefined?store.get(key):store.put(value,key);tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(tx.error)})}
  async function start(bridge){
   const byId=id=>document.getElementById(id),message=byId('project-save-state'),auto=byId('project-autosave');
-  let remote=null,ready=false,blocked=false,forcePending=false,lastLocal='',sync;
-  const sharedKey='shared';
-
-  function report(state,error){
-   const labels={saved:'Salvo na nuvem.',pending:'Alterações pendentes.',saving:'Salvando na nuvem…',error:'Salvamento pendente.'};
-   message.textContent=error?`${labels.error} ${error.message}`:labels[state]||state;
-   if(error?.code==='project/conflict')blocked=true;
-  }
-
-  sync=ProjectStore.createSync({
-   snapshot:()=>bridge.snapshot(),
-   save:async p=>{if(!remote||!ready||blocked)throw Error(blocked?'Recarregue da nuvem para resolver o conflito.':'Nuvem indisponível.');await remote.save(p)},
-   onState:report
-  });
-
-  async function capture(){
-   if(!ready||!bridge.stable())return;
+  let remote=null,ready=false,sending=false,baseline=RealtimeProject.shared(bridge.empty()),revision=0,pending=null,ack=null,replaceNext=false,saveTimer=0,lastSend=0,unsubscribe=null,stopped=false,lastError=null,failures=0,retryAfter=0,paused=false,generation=0;
+  const snapshot=()=>RealtimeProject.shared(bridge.snapshot());
+  const stable=()=>bridge.stable()&&(bridge.canReceive?bridge.canReceive():true);
+  function report(state,error){if(error)lastError=error;else if(state==='saved')lastError=null;message.textContent=error?`Alterações não salvas. ${error.message}`:({saved:'Sincronizado com a nuvem.',pending:'Alterações pendentes.',saving:'Sincronizando…',loading:'Carregando da nuvem…'}[state]||state);}
+  function loading(value){bridge.setLoading(value);for(const id of ['project-save','project-reload','project-import','project-export'])byId(id).disabled=value;}
+  function apply(project){const current=snapshot();if(JSON.stringify(current)===JSON.stringify(project))return;if(bridge.update)bridge.update(project);else bridge.restore(project);}
+  const sync=ProjectStore.createSync({snapshot,save:async sent=>{
+   if(!remote||!ready)throw Error('Nuvem indisponível.');
+   sending=true;lastSend=Date.now();const replacing=replaceNext;replaceNext=false;
+   try{const result=await remote.save(sent,{base:baseline,replace:replacing});failures=0;retryAfter=0;lastError=null;ack={sent,project:RealtimeProject.shared(result?.project||sent),revision:result?.revision??remote.getRevision()};}
+   catch(error){replaceNext ||= replacing;failures++;retryAfter=Date.now()+Math.min(30000,1000*2**failures);paused=['permission-denied','resource-exhausted','failed-precondition'].some(code=>String(error.code||'').endsWith(code));throw error}
+   finally{sending=false;setTimeout(drain,0)}
+  },onState:report});
+  function receive(event){if(!event?.project||event.revision<=revision)return;if(!pending||event.revision>=pending.revision)pending={project:RealtimeProject.shared(event.project),revision:event.revision};drain();}
+  function drain(){
+   if(!ready||sending||!stable())return;
    try{
-    const p=ProjectStore.validateProject(bridge.snapshot()),record={project:p,pending:sync.dirty(),auto:auto.checked,forced:forcePending,revision:remote?.getRevision()||0},text=JSON.stringify(record);
-    if(text!==lastLocal){
-     await cache(sharedKey,record);
-     lastLocal=text;
-     if(sync.dirty())report('pending');
-    }
-   }catch(e){report('error',e)}
+    let changed=false;
+    if(ack){const confirmed=ack;ack=null;changed=true;apply(RealtimeProject.merge(confirmed.sent,snapshot(),confirmed.project));baseline=confirmed.project;revision=confirmed.revision;sync.accept(baseline);}
+    if(pending){const event=pending;pending=null;if(event.revision>revision){changed=true;apply(RealtimeProject.merge(baseline,snapshot(),event.project));baseline=event.project;revision=event.revision;sync.accept(baseline);}}
+    if(!changed)return;
+    if(sync.dirty()){if(!lastError)report('pending');scheduleSave()}else report('saved');
+   }catch(error){report('error',error)}
   }
-
-  function setLoading(value){
-   bridge.setLoading(value);
-   for(const id of ['project-save','project-reload','project-import','project-export']){
-    const el=byId(id); if(el)el.disabled=value;
-   }
+  function scheduleSave(){
+   if(stopped||paused||navigator.onLine===false||saveTimer||!ready||!remote||(!auto.checked&&!replaceNext)||sending)return;
+   const delay=Math.max(200,750-(Date.now()-lastSend),retryAfter-Date.now());
+   saveTimer=setTimeout(async()=>{saveTimer=0;if(!ready||sending||!stable())return;sync.enabled=auto.checked;await sync.flush(replaceNext);drain();},delay);
   }
-
-  function hasProjectContent(project){
-   if(!project)return false;
-   return ['types','statuses','scenes','maps'].some(key=>Array.isArray(project[key])&&project[key].length);
-  }
-
-  async function initializeSharedProject(){
-   setLoading(true);
-   ready=false;
+  function capture(){if(!ready)return;drain();if(!bridge.stable())return;try{if(sync.dirty()){if(!lastError)report('pending');scheduleSave()}}catch(error){report('error',error)}}
+  function listen(){unsubscribe?.();unsubscribe=remote.watch(receive,error=>report('error',error));}
+  async function connect(){
+   const mine=++generation;unsubscribe?.();unsubscribe=null;
+   loading(true);report('loading');ready=false;paused=false;lastError=null;
    try{
-    const connection=await FirebaseProject.create();
-    remote=connection.store();
-    const [cloud,local,legacyGuest]=await Promise.all([remote.load(),cache(sharedKey),cache('guest')]);
-
-    if(cloud){
-     bridge.restore(cloud);
-     sync.accept(bridge.snapshot());
-     if(local?.pending){
-      if(local.revision===remote.getRevision()||confirm('Existe uma cópia local pendente deste dispositivo. Deseja usar essa cópia e substituir o projeto atual da nuvem?')){
-       bridge.restore(ProjectStore.validateProject(local.project));
-       auto.checked=local.auto!==false;
-       forcePending=Boolean(local.forced);
-      }
-     }
-    }else{
-     const migration=hasProjectContent(local?.project)?local:hasProjectContent(legacyGuest?.project)?legacyGuest:null;
-     if(migration){
-      bridge.restore(ProjectStore.validateProject(migration.project));
-      auto.checked=migration.auto!==false;
-      sync.accept(bridge.empty());
-      forcePending=true;
-     }else{
-      bridge.restore(bridge.empty());
-      sync.accept(bridge.snapshot());
-     }
-    }
-
-    ready=true;
-    lastLocal='';
-    await capture();
-    if(forcePending||sync.dirty()){
-     sync.enabled=auto.checked;
-     if(await sync.flush(true)){forcePending=false;blocked=false;await capture();}
-    }else report('saved');
-   }catch(e){
-    remote=null;
-    try{
-     const local=await cache(sharedKey),legacy=await cache('guest');
-     const fallback=local?.project||legacy?.project;
-     if(fallback)bridge.restore(ProjectStore.validateProject(fallback));
-     sync.accept(bridge.snapshot());
-    }catch{}
-    ready=true;
-    report('error',Error(`Nuvem indisponível; usando a cópia local. ${e.message||''}`.trim()));
-   }finally{
-    setLoading(false);
-   }
+    const connection=await FirebaseProject.create();if(mine!==generation)return;
+    remote=connection.store();let seen=false;
+    const first=await new Promise((resolve,reject)=>{unsubscribe=remote.watch(event=>{if(mine!==generation)return;if(!seen){seen=true;resolve(event)}else receive(event)},error=>{if(!seen){seen=true;reject(error)}else report('error',error)})});
+    if(mine!==generation)return;
+    baseline=RealtimeProject.shared(first.project||bridge.empty());bridge.restore(baseline);revision=first.revision;sync.accept(snapshot());ready=true;report('saved');loading(false);drain();
+   }catch(error){if(mine!==generation)return;remote=null;ready=false;report('error',Error(`Não foi possível carregar o projeto. Verifique a conexão e clique em Recarregar da nuvem. ${error.message||''}`));loading(true);byId('project-reload').disabled=false;}
   }
 
-  async function reloadRemote(force=false){
-   if(!remote)return report('error',Error('Nuvem indisponível.'));
-   if(!force&&sync.dirty())return;
-   try{
-    const p=await remote.load();
-    if(!p)return;
-    const current=ProjectStore.validateProject(bridge.snapshot());
-    if(JSON.stringify(p)!==JSON.stringify(current)){
-     bridge.restore(p);
-     sync.accept(bridge.snapshot());
-     forcePending=false;blocked=false;lastLocal='';
-     await capture();
-    }
-    report('saved');
-   }catch(e){report('error',e)}
-  }
-
-  auto.onchange=()=>{sync.enabled=auto.checked;lastLocal='';capture()};
-  byId('project-save').onclick=async()=>{await capture();sync.enabled=auto.checked;if(await sync.flush(true)){forcePending=false;blocked=false;await capture();}};
+  auto.onchange=()=>{sync.enabled=auto.checked;if(auto.checked)capture();else if(saveTimer){clearTimeout(saveTimer);saveTimer=0}};
+  byId('project-save').onclick=async()=>{if(!ready||!stable())return;paused=false;sync.enabled=auto.checked;await sync.flush(true);drain()};
   byId('project-reload').onclick=async()=>{
-   if(sync.dirty()&&!confirm('Substituir alterações locais pelo projeto salvo na nuvem?'))return;
-   try{ready=false;setLoading(true);blocked=false;await reloadRemote(true)}finally{ready=true;setLoading(false);capture()}
+   if(!ready)return connect();if(sending)return;
+   if(sync.dirty()&&!confirm('Descartar alterações ainda não salvas e carregar o projeto da nuvem?'))return;
+   loading(true);ready=false;paused=false;lastError=null;unsubscribe?.();unsubscribe=null;try{const project=await remote.load();baseline=RealtimeProject.shared(project||bridge.empty());bridge.restore(baseline);revision=remote.getRevision();pending=ack=null;replaceNext=false;sync.accept(snapshot());ready=true;report('saved');listen()}catch(error){report('error',error);ready=true}finally{loading(false);if(ready&&!unsubscribe)listen()}
   };
-
-  byId('project-export').onclick=()=>{try{const p=ProjectStore.validateProject(bridge.snapshot()),url=URL.createObjectURL(new Blob([JSON.stringify(p,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='CombatMaps-projeto.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000)}catch(e){report('error',e)}};
-
-  const picker=byId('project-import-file');
-  byId('project-import').onclick=()=>picker.click();
-  picker.onchange=async()=>{
-   const file=picker.files?.[0];picker.value='';
-   if(!file)return;
-   if(!ready)return report('error',Error('Aguarde o carregamento do projeto.'));
-   try{
-    if(file.size>6000000)throw Error('Arquivo de projeto muito grande.');
-    const p=ProjectStore.validateProject(JSON.parse(await file.text()));
-    if(!confirm('Substituir o projeto atual pelos dados importados?'))return;
-    bridge.restore(p);lastLocal='';forcePending=true;await capture();
-    if(await sync.flush(true)){forcePending=false;blocked=false;await capture();}
-   }catch(e){report('error',e)}
-  };
-
-  document.addEventListener('pointerup',()=>setTimeout(capture,80),true);
-  document.addEventListener('change',()=>setTimeout(capture,80),true);
-  document.addEventListener('click',()=>setTimeout(capture,80),true);
-  document.addEventListener('keyup',()=>setTimeout(capture,80),true);
-  setInterval(capture,1000);
-  setInterval(async()=>{
-   sync.enabled=auto.checked;
-   if(!ready||blocked||!bridge.stable())return;
-   await capture();
-   if(sync.dirty()){
-    if(await sync.flush(forcePending)){forcePending=false;await capture();}
-   }else{
-    await reloadRemote(false);
-   }
-  },10000);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)capture();else if(ready&&!sync.dirty())reloadRemote(false)});
-  window.addEventListener('pagehide',capture);
-
-  await initializeSharedProject();
-  return {capture,reload:()=>reloadRemote(true)};
+  byId('project-export').onclick=()=>{try{const project=ProjectStore.validateProject(bridge.snapshot()),url=URL.createObjectURL(new Blob([JSON.stringify(project,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='CombatMaps-projeto.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),5000)}catch(error){report('error',error)}};
+  const picker=byId('project-import-file');byId('project-import').onclick=()=>picker.click();
+  picker.onchange=async()=>{const file=picker.files?.[0];picker.value='';if(!file||!ready||sending)return;try{if(file.size>6000000)throw Error('Arquivo de projeto muito grande.');const project=ProjectStore.validateProject(JSON.parse(await file.text()));if(!ready||sending)return;if(!confirm('Substituir o projeto compartilhado pelos dados importados?'))return;bridge.restore(project);replaceNext=true;await sync.flush(true);drain()}catch(error){report('error',error)}};
+  for(const event of ['pointerup','pointercancel','change','click','keyup'])document.addEventListener(event,()=>setTimeout(capture,80),true);
+  const timer=setInterval(capture,500);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)capture()});
+  window.addEventListener('online',()=>{if(ready){listen();capture()}else connect()});
+  window.addEventListener('offline',()=>report('error',Error('Sem conexão. O projeto não é salvo neste navegador.')));
+  window.addEventListener('pagehide',event=>{if(!event.persisted){stopped=true;clearInterval(timer);clearTimeout(saveTimer);unsubscribe?.();}});
+  await connect();return {capture,reload:()=>byId('project-reload').onclick()};
  }
  root.ProjectController={start};
 })(globalThis);
