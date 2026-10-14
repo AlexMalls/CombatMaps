@@ -2994,7 +2994,7 @@
         const draft = holder.draft;
         if (!draft || !editor.open) return;
         mediaPicker ||= MediaLibrary.create();
-        const file = await mediaPicker.choose();
+        const file = await mediaPicker.choose(kind === "token" ? "Tokens" : "Cenas");
         if (!file || holder.draft !== draft || !editor.open || !isMasterMode()) return;
         const version = ++holder.loadVersion, image = new Image();
         draft.loading = true;
