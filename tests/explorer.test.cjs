@@ -83,9 +83,9 @@ test('catalog lists loaded types once even with many map tokens, using template 
  c.tokens=[];c.renderAssetExplorerContent();assert.equal(content.children[1].children.length,2);
  for(const category of ['maps','scenes','status']){c.explorerState.category=category;c.renderAssetExplorerContent();assert.equal(content.children.length,2);assert.match(content.children[1].textContent,/Nenhum arquivo/);}
 });
-test('native image picker resets selections without importing or modifying the catalog',()=>{
+test('image action opens cloud choice while retaining native file cleanup',()=>{
  let clicks=0;const input={value:'previous.png',click(){clicks++}};
- const c=setup({isMasterMode:()=>true,explorerState:{category:'tokens',fileSizes:new Map()},assetExplorer:{open:true},tokenImagePicker:input});
+ const c=setup({isMasterMode:()=>true,explorerState:{category:'tokens',fileSizes:new Map()},assetExplorer:{open:true},tokenImagePicker:input,chooseCloudImage(kind){assert.equal(kind,'token');clicks++}});
  vm.runInContext(source('chooseTokenImage'),c);c.chooseTokenImage();assert.equal(clicks,1);assert.equal(input.value,'');
  input.value='chosen.gif';c.discardTokenImageSelection=undefined;vm.runInContext(source('discardTokenImageSelection'),c);c.discardTokenImageSelection();assert.equal(input.value,'');
  c.isMasterMode=()=>false;c.chooseTokenImage();assert.equal(clicks,1);

@@ -471,8 +471,8 @@
        ====================================================================== */
     /* MÍDIAS DO PROJETO: caminhos relativos centralizados; trocar a origem aqui. */
     :root {
-      --media-frame: url("Midia/Moldura.jpeg");
-      --media-universe: url("Midia/Universe.jpeg");
+      --media-frame: url("Midia/HUD/Moldura.jpeg");
+      --media-universe: url("Midia/HUD/Universe.jpeg");
       /* Moldura 2048 × 1080: mesma escala cover em todas as suas extensões. */
       --frame-texture-width: max(100vw, 189.62962963dvh);
       --frame-texture-height: max(100dvh, 52.734375vw);
@@ -1410,6 +1410,14 @@
       input[type="checkbox"]:checked::before { border-color: HighlightText; }
       input:is([type="checkbox"], [type="radio"]):checked { background: Highlight; }
     }
+    .media-library { padding: 1rem; width: min(760px, calc(100vw - 32px)); max-height: 85dvh; overflow: auto; }
+    .media-library__sources { display:flex; gap:.75rem; margin:1rem 0; }
+    .media-library button:disabled { opacity:.4; cursor:not-allowed; }
+    .media-library__list { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:.75rem; margin-top:1rem; }
+    .media-library__list button { display:grid; gap:.5rem; padding:.5rem; overflow-wrap:anywhere; }
+    .media-library__list img { width:100%; height:100px; object-fit:contain; background:rgba(0,0,0,.12); }
+    .project-settings__backup { display:flex; gap:.5rem; flex-wrap:wrap; }
+    #project-save-state { font-size:.8rem; overflow-wrap:anywhere; }
   </style>
   <link rel="stylesheet" href="command-bar.css">
 </head>
@@ -1437,15 +1445,7 @@
           <g id="grid-highlight-cells"></g>
           <line id="grid-highlight-guide" class="grid-highlight-guide" data-active="false"/><text id="grid-highlight-value" class="grid-highlight-value" text-anchor="middle" dominant-baseline="middle" data-active="false"></text>
         </svg>
-        <article id="token-soldados-01" class="token" data-type="token" data-token-id="soldados-01" data-token-type="soldiers"
-          data-grid-col="0" data-grid-row="0" data-grid-size="1" data-selected="false"
-          tabindex="0" role="button" aria-label="Token Soldados 01. Clique para selecionar e redimensionar.">
-          <img class="token__image" width="1088" height="1086" src="Midia/Soldados%2001%20PNG.png" alt="Soldados em armadura azul">
-          <button class="token__resize-handle token__resize-handle--nw" type="button" data-resize-corner="nw" aria-label="Redimensionar token pelo canto superior esquerdo"></button>
-          <button class="token__resize-handle token__resize-handle--ne" type="button" data-resize-corner="ne" aria-label="Redimensionar token pelo canto superior direito"></button>
-          <button class="token__resize-handle token__resize-handle--sw" type="button" data-resize-corner="sw" aria-label="Redimensionar token pelo canto inferior esquerdo"></button>
-          <button class="token__resize-handle token__resize-handle--se" type="button" data-resize-corner="se" aria-label="Redimensionar token pelo canto inferior direito"></button>
-        </article>
+
       </section>
 
       <div id="formation-magic" class="formation-magic" data-active="false" aria-hidden="true">
@@ -1582,6 +1582,14 @@
             aria-describedby="block-sensitivity-help" autocomplete="off" spellcheck="false">
         </section>
         <p id="block-sensitivity-help" class="sr-only">De 1 a 3 vezes. Valores maiores projetam o grupo mais longe com o mesmo movimento do mouse ou dos dedos.</p>
+      </fieldset>
+      <fieldset class="app-settings__control project-settings"><legend>Projeto</legend>
+        <button id="project-login" type="button">Entrar com Google</button><button id="project-logout" type="button" hidden>Sair da conta</button>
+        <label class="ui-check"><span>Salvamento automático (10 s)</span><input id="project-autosave" type="checkbox" checked></label>
+        <button id="project-save" type="button">Salvar agora</button><button id="project-reload" type="button">Recarregar da nuvem</button>
+        <section class="project-settings__backup" aria-label="Backup"><button id="project-export" type="button">Exportar projeto</button><button id="project-import" type="button">Importar projeto</button></section>
+        <input id="project-import-file" type="file" accept="application/json,.json" hidden>
+        <p id="project-save-state" role="status" aria-live="polite">Preparando projeto…</p>
       </fieldset>
       <section id="movement-history-control" class="app-settings__history" aria-label="Histórico de ações">
         <hr>
@@ -1858,6 +1866,10 @@
         </footer>
       </dialog>
 
+  <script src="media-library.js"></script>
+  <script src="project-store.js"></script>
+  <script src="firebase-project.js"></script>
+  <script src="project-controller.js"></script>
   <script src="command-bar.js"></script>
   <script src="grid-area-tools.js"></script>
   <script src="token-image-tools.js"></script>
@@ -2591,6 +2603,13 @@
         return token;
       }
 
+      function ensureWorkspaceScene() {
+        if (!activeSceneId) {
+          const id = `scene-${nextSceneId++}`;
+          scenes.push({ id, name: "Cena sem título", canvas: { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) }, grid: getSceneGridSettings(), backgroundUrl: "", fileName: "", fileSize: 0, imageRect: null, workspaceTokens: tokens.slice() });
+          activeSceneId = id; renderSceneDock();
+        }
+      }
       function createTokenFromType(typeId, cell) {
         const type = TOKEN_TYPES[typeId];
         if (!isMasterMode() || hasPriorityTool() || state.isMoving || !type || !cell || !canPlaceTokenFootprint(cell)) return null;
@@ -2967,6 +2986,46 @@
         tokenTemplateEditor.showModal();
       }
 
+      let mediaPicker = null;
+      async function chooseCloudImage(kind) {
+        if (!isMasterMode()) return;
+        const holder = kind === "token" ? tokenTemplateState : sceneEditorState;
+        const editor = kind === "token" ? tokenTemplateEditor : sceneEditor;
+        const draft = holder.draft;
+        if (!draft || !editor.open) return;
+        mediaPicker ||= MediaLibrary.create();
+        const file = await mediaPicker.choose();
+        if (!file || holder.draft !== draft || !editor.open || !isMasterMode()) return;
+        const version = ++holder.loadVersion, image = new Image();
+        draft.loading = true;
+        const error = kind === "token" ? tokenTemplateError : sceneEditorError;
+        const confirm = kind === "token" ? tokenTemplateConfirm : sceneConfirm;
+        confirm.disabled = true; error.textContent = "Carregando imagem…";
+        image.onload = () => {
+          if (holder.draft !== draft || version !== holder.loadVersion || !editor.open) return;
+          if (!image.naturalWidth || !image.naturalHeight) { image.onerror(); return; }
+          draft.loading = false; draft.fileName = file.name; draft.fileSize = file.size;
+          if (kind === "token") {
+            if (draft.ownsImage) URL.revokeObjectURL(draft.image);
+            Object.assign(draft, { image: file.url, ownsImage: false });
+            tokenTemplatePreview.src = file.url; tokenTemplatePreview.hidden = false;
+            tokenTemplateEmpty.hidden = true; tokenTemplateFile.textContent = file.name;
+            tokenTemplateEditImage.disabled = false;
+          } else {
+            if (draft.ownsBackground) URL.revokeObjectURL(draft.backgroundUrl);
+            Object.assign(draft, { backgroundUrl: file.url, ownsBackground: false, imageRect: fitSceneBackground(image.naturalWidth, image.naturalHeight, draft.canvas.width, draft.canvas.height) });
+            sceneBackground.src = file.url; renderScenePreview();
+          }
+          error.textContent = ""; confirm.disabled = false;
+        };
+        image.onerror = () => {
+          if (holder.draft !== draft || version !== holder.loadVersion || !editor.open) return;
+          draft.loading = false; confirm.disabled = kind === "token" && !draft.image;
+          error.textContent = "Não foi possível carregar a imagem. Escolha outra.";
+        };
+        image.src = file.url;
+      }
+
       function selectTokenTemplateImage(event) {
         const file = event.target.files?.[0], draft = tokenTemplateState.draft;
         tokenTemplatePicker.value = "";
@@ -3049,6 +3108,13 @@
         if (!draft?.image || draft.loading || !isMasterMode()) return;
         window.TokenImageEditor.open(draft.image, blob => {
           if (tokenTemplateState.draft !== draft || !tokenTemplateEditor.open || !isMasterMode()) return;
+          if (!draft.ownsImage && /^(https:\/\/raw\.githubusercontent\.com\/AlexMalls\/CombatMaps\/main\/|Midia\/Storage\/)/.test(draft.image)) {
+            const url = URL.createObjectURL(blob), download = document.createElement("a");
+            download.href = url; download.download = `${draft.fileName.replace(/\.[^.]+$/, "") || "token"}-editado.png`; download.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            tokenTemplateError.textContent = "Imagem editada exportada. Adicione-a ao Storage no GitHub e selecione-a pela Nuvem para salvar.";
+            return;
+          }
           if (draft.ownsImage) URL.revokeObjectURL(draft.image);
           draft.image = URL.createObjectURL(blob);
           draft.ownsImage = true;
@@ -3063,7 +3129,7 @@
         if (!isMasterMode() || !assetExplorer.open || explorerState.category !== "tokens") return;
         tokenImagePicker.value = "";
         tokenImagePicker.accept = "image/*";
-        tokenImagePicker.click();
+        chooseCloudImage("token");
       }
 
       function addAssetForCategory() {
@@ -3074,7 +3140,7 @@
         if (explorerState.category === "status") { openStatusEditor(); return; }
         tokenImagePicker.value = "";
         tokenImagePicker.accept = explorerState.category === "maps" ? "image/*" : "";
-        tokenImagePicker.click();
+        chooseCloudImage("token");
       }
 
       function fitSceneImageForViewport(rect, canvas, width, height) {
@@ -3995,7 +4061,7 @@
       masterTokenButton.addEventListener("click", () => setTokenDockOpen(!state.tokenDockOpen));
       masterScenesButton.addEventListener("click", () => setSceneDockOpen(!state.sceneDockOpen));
       renderTokenDock();
-      document.getElementById("token-template-choose").addEventListener("click", () => { tokenTemplatePicker.value = ""; tokenTemplatePicker.click(); });
+      document.getElementById("token-template-choose").addEventListener("click", () => chooseCloudImage("token"));
       tokenTemplatePicker.addEventListener("change", selectTokenTemplateImage);
       tokenTemplateEditImage.addEventListener("click", openTokenImageEditor);
       document.getElementById("status-confirm").addEventListener("click", confirmStatus);
@@ -4007,7 +4073,7 @@
       tokenTemplateEditor.addEventListener("keydown", event => event.stopPropagation());
       tokenImagePicker.addEventListener("change", discardTokenImageSelection);
       tokenImagePicker.addEventListener("cancel", discardTokenImageSelection);
-      document.getElementById("scene-choose-background").addEventListener("click", () => { sceneBackgroundPicker.value = ""; sceneBackgroundPicker.click(); });
+      document.getElementById("scene-choose-background").addEventListener("click", () => chooseCloudImage("scene"));
       sceneBackgroundPicker.addEventListener("change", selectSceneBackground);
       ["scene-editor-close", "scene-editor-cancel"].forEach(id => document.getElementById(id).addEventListener("click", () => closeSceneEditor()));
       sceneConfirm.addEventListener("click", confirmScene);
@@ -7123,7 +7189,7 @@
       setVisible(state.visible);
       setAbsolute(state.absolute);
       updateAllTokens();
-      initializeDefaultScenes();
+      renderSceneDock();
       commandBar = CommandBar.create({
         getTokens: () => tokens,
         getInfo: getTokenInfo,
@@ -7141,6 +7207,76 @@
       }));
 
 
+
+      function cloudImagePath(url) {
+        if (!url) return "";
+        const prefix = MediaLibrary.BASE;
+        const path = url.startsWith(prefix) ? decodeURIComponent(url.slice(prefix.length)) : decodeURIComponent(url);
+        return path === "Midia/Soldados 01 PNG.png" ? "Midia/Storage/Tokens/Soldados 01 PNG.png" : path;
+      }
+      function cloudImageUrl(path) { return path ? MediaLibrary.BASE + path.split("/").map(encodeURIComponent).join("/") : ""; }
+      function snapshotProject() {
+        if (tokens.some(token => getTokenInfo(token)?.life > 0)) ensureWorkspaceScene();
+        const saveToken = token => { const info = getTokenInfo(token); return info ? { id: info.id, typeId: info.typeId, ...getTokenGridState(token), life: info.life, maxLife: info.maxLife, status: info.status } : null; };
+        const saveScene = scene => {
+          const { id, name, canvas, grid, backgroundUrl, fileName, fileSize, imageRect } = scene;
+          return { id, name, canvas, grid: scene.id === activeSceneId ? getSceneGridSettings() : grid, backgroundUrl: cloudImagePath(backgroundUrl), fileName, fileSize, imageRect, tokens: (scene.id === activeSceneId ? tokens : scene.workspaceTokens || []).map(saveToken).filter(t => t && t.life > 0) };
+        };
+        const settings = {};
+        ["visible", "absolute", "distance", "opacity", "size", "cameraZoom", "cameraX", "cameraY", "touchMode", "masterMode", "debugEnabled", "blockSensitivity"].forEach(key => settings[key] = state[key]);
+        settings.commandPosition = document.querySelector('[name="command-position"]:checked')?.value || "top";
+        settings.linkOpacity = Number(document.getElementById("command-link-opacity").value);
+        settings.showLinks = document.getElementById("command-show-links").checked;
+        return { version: 1, types: Object.values(TOKEN_TYPES).map(t => ({ ...t, image: cloudImagePath(t.image) })), statuses: statusTypes.map(t => ({ ...t })), scenes: scenes.map(saveScene), maps: maps.map(saveScene), activeSceneId, settings };
+      }
+      function emptyProject() { return { version: 1, types: [], statuses: [], scenes: [], maps: [], activeSceneId: null, settings: { visible: true, absolute: false, distance: 1.5, opacity: 5, size: 48, cameraZoom: 1, cameraX: 0, cameraY: 0 } }; }
+      function restoreProject(input) {
+        const project = ProjectStore.validateProject(input);
+        cancelWorkspaceGestures("restaurar projeto"); clearGridHighlights(); replaceGridPointMarkersFromData([]); closeAllTokenStatus(); setCommandBarOpen(false);
+        [...tokenDeaths.keys()].forEach(cancelTokenDeath);
+        tokens.forEach(token => token.remove()); tokens.length = 0; tokenData.clear();
+        state.selectionOrder = []; state.moveSelectionOrder = [];
+        movementHistory.length = movementRedoHistory.length = 0;
+        for (const id of Object.keys(TOKEN_TYPES)) delete TOKEN_TYPES[id];
+        project.types.forEach(type => TOKEN_TYPES[type.id] = Object.freeze({ ...type, image: cloudImageUrl(type.image) }));
+        const counter = (items, prefix) => Math.max(0, ...items.map(t => Number(t.id.replace(prefix, "")) || 0)) + 1;
+        nextTokenTypeId = counter(project.types, "custom-"); nextSceneId = counter(project.scenes, "scene-"); nextMapId = counter(project.maps, "map-"); nextStatusId = counter(project.statuses, "status-");
+        statusTypes.splice(0, statusTypes.length, ...project.statuses);
+        function restoreScene(scene) {
+          const workspaceTokens = (scene.tokens || []).filter(t => t.life > 0).map(saved => {
+            const token = buildTokenInstance(saved.typeId, saved), temporaryId = tokenIds.get(token);
+            tokenData.delete(temporaryId); tokenIds.delete(token);
+            token.id = `token-${saved.id}`; token.dataset.tokenId = saved.id;
+            token.dataset.gridSize = String(saved.size);
+            Object.assign(registerTokenData(token), { life: saved.life, maxLife: saved.maxLife, status: saved.status }); updateTokenHealthVisuals(token);
+            return token;
+          });
+          return { ...scene, backgroundUrl: cloudImageUrl(scene.backgroundUrl), workspaceTokens };
+        }
+        scenes.splice(0, scenes.length, ...project.scenes.map(restoreScene)); maps.splice(0, maps.length, ...project.maps.map(restoreScene));
+        activeSceneId = null;
+        setMasterMode(true);
+        if (project.activeSceneId) loadScene(project.activeSceneId);
+        const settings = project.settings;
+        setVisible(settings.visible ?? true); setAbsolute(settings.absolute ?? false);
+        distanceControl.set(settings.distance ?? 1.5); opacityControl.set(settings.opacity ?? 5); sizeControl.set(settings.size ?? 48);
+        setCameraTransform(settings.cameraZoom ?? 1, settings.cameraX ?? 0, settings.cameraY ?? 0);
+        if (typeof settings.touchMode === "boolean") setTouchMode(settings.touchMode);
+        if (typeof settings.masterMode === "boolean") setMasterMode(settings.masterMode);
+        if (typeof settings.debugEnabled === "boolean") setDebugEnabled(settings.debugEnabled);
+        if (Number.isFinite(settings.blockSensitivity)) blockSensitivityControl.set(settings.blockSensitivity);
+        const position = settings.commandPosition === "side" ? "side" : "top";
+        document.querySelectorAll('[name="command-position"]').forEach(input => input.checked = input.value === position); commandBar.setOrientation(position);
+        if (Number.isFinite(settings.linkOpacity)) { const opacity = document.getElementById("command-link-opacity"); opacity.value = String(settings.linkOpacity); opacity.dispatchEvent(new Event("input")); }
+        if (typeof settings.showLinks === "boolean") { const links = document.getElementById("command-show-links"); links.checked = settings.showLinks; links.dispatchEvent(new Event("change")); }
+        renderTokenDock(); renderSceneDock(); renderAssetExplorerContent(); renderActiveSceneBackground(); updateAllTokens(); updateMovementHistoryUI();
+      }
+      let persistencePointerDown = false;
+      document.addEventListener("pointerdown", () => { persistencePointerDown = true; }, true);
+      ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => { persistencePointerDown = false; }, true));
+      window.addEventListener("blur", () => { persistencePointerDown = false; });
+      const bridge = { snapshot: snapshotProject, restore: restoreProject, empty: emptyProject, stable: () => !state.isMoving && !persistencePointerDown, setLoading: loading => { workspaceLayers.inert = loading; assetExplorer.inert = loading; tokenDock.inert = loading || !state.tokenDockOpen; sceneDock.inert = loading || !state.sceneDockOpen; } };
+      ProjectController.start(bridge).catch(error => { document.getElementById("project-save-state").textContent = `Não foi possível recuperar o projeto: ${error.message}`; });
 
       // Integração opcional com agentes em navegadores que suportam WebMCP.
       const modelContext = document.modelContext;
