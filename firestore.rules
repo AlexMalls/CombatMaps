@@ -1,15 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function owner(uid) { return request.auth != null && request.auth.uid == uid; }
-    match /users/{uid}/project/state {
-      allow read: if owner(uid);
-      allow create, update: if owner(uid) && request.resource.data.keys().hasOnly(['version', 'revision', 'keys', 'updatedAt']) && request.resource.data.version == 1 && request.resource.data.revision is int && request.resource.data.revision > 0 && request.resource.data.keys is list && request.resource.data.keys.size() <= 400;
-      allow delete: if owner(uid);
-    }
-    match /users/{uid}/parts/{part} {
-      allow read, delete: if owner(uid);
-      allow create, update: if owner(uid) && request.resource.data.keys().hasOnly(['json']) && request.resource.data.json is string && request.resource.data.json.size() <= 400000;
+    // CombatMaps currently uses one shared project with no user login.
+    // Public access is intentionally restricted to this single project tree.
+    match /projects/main {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['version', 'revision', 'keys', 'updatedAt'])
+        && request.resource.data.version == 1
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.keys is list
+        && request.resource.data.keys.size() <= 400;
+      allow delete: if false;
+
+      match /parts/{part} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly(['json'])
+          && request.resource.data.json is string
+          && request.resource.data.json.size() <= 400000;
+        allow delete: if true;
+      }
     }
   }
 }
