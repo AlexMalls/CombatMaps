@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function source(name){const i=script.indexOf(`      function ${name}(`);assert.ok(i>=0,name);return script.slice(i,script.indexOf('\n      }',i)+8);}
-function geometry(){const c=vm.createContext({uniqueAssetId:prefix=>prefix,Math});for(const name of ['fitSceneBackground','resizeSceneBackground','moveSceneBackground'])vm.runInContext(source(name),c);return c;}
+function geometry(){const c=vm.createContext({browserPreferences:{role:"master",visible:true,opacity:10},BrowserPreferences:{save:value=>value},uniqueAssetId:prefix=>prefix,Math});for(const name of ['fitSceneBackground','resizeSceneBackground','moveSceneBackground'])vm.runInContext(source(name),c);return c;}
 function plain(value){return JSON.parse(JSON.stringify(value));}
 test('initial background fits portrait and landscape without stretching or cropping',()=>{
  const c=geometry();assert.deepEqual(plain(c.fitSceneBackground(100,200,800,400)),{x:300,y:0,width:200,height:400});
@@ -15,7 +15,7 @@ test('corner resize is independent on both axes and image can be moved to fill t
  const min=c.resizeSceneBackground(moved,-999,-999,800,400);assert.equal(min.width,16);assert.equal(min.height,16);
 });
 test('category plus buttons open scene/token editors or the native picker',()=>{
- let opened=0,clicked=0;const c=vm.createContext({uniqueAssetId:prefix=>prefix,isMasterMode:()=>true,assetExplorer:{open:true},explorerState:{category:'scenes'},openSceneEditor(){opened++},openTokenTemplateEditor(){clicked++},openStatusEditor(){clicked++},tokenImagePicker:{value:'old',click(){clicked++}}});
+ let opened=0,clicked=0;const c=vm.createContext({browserPreferences:{role:"master",visible:true,opacity:10},BrowserPreferences:{save:value=>value},uniqueAssetId:prefix=>prefix,isMasterMode:()=>true,assetExplorer:{open:true},explorerState:{category:'scenes'},openSceneEditor(){opened++},openTokenTemplateEditor(){clicked++},openStatusEditor(){clicked++},tokenImagePicker:{value:'old',click(){clicked++}}});
  vm.runInContext(source('addAssetForCategory'),c);c.addAssetForCategory();assert.equal(opened,1);
  for(const category of ['tokens','maps','status']){c.explorerState.category=category;c.addAssetForCategory();}assert.equal(clicked,2);assert.equal(opened,2);
  c.isMasterMode=()=>false;c.addAssetForCategory();assert.equal(clicked,2);
@@ -23,7 +23,7 @@ test('category plus buttons open scene/token editors or the native picker',()=>{
 function sceneContext(){
  const revoked=[],images=[];
  class FakeImage{constructor(){images.push(this);this.naturalWidth=100;this.naturalHeight=200}}
- const c=vm.createContext({uniqueAssetId:prefix=>prefix,Math,Image:FakeImage,URL:{createObjectURL:file=>`blob:${file.name}`,revokeObjectURL:url=>revoked.push(url)},
+ const c=vm.createContext({browserPreferences:{role:"master",visible:true,opacity:10},BrowserPreferences:{save:value=>value},uniqueAssetId:prefix=>prefix,Math,Image:FakeImage,URL:{createObjectURL:file=>`blob:${file.name}`,revokeObjectURL:url=>revoked.push(url)},
   state:{visible:true,absolute:false,distance:1.5,opacity:5,size:48},sceneGridSettings:{visible:true,absolute:false,distance:2,opacity:30,size:64},
   isMasterMode:()=>true,sceneEditor:{open:true,close(){this.open=false}},assetExplorer:{open:true},explorerCategories:[],
   sceneEditorState:{draft:{canvas:{width:800,height:400},backgroundUrl:'',fileName:'',fileSize:0,imageRect:null,loading:false},loadVersion:0,pendingUrl:null,gesture:null,scale:0.5},
@@ -68,7 +68,7 @@ test('mouse and touch corner resize use logical coordinates at scaled preview si
 test('shared numeric controls update scene defaults without mutating the current map settings',()=>{
  const field=()=>({value:'',style:{setProperty(){}},setAttribute(){},addEventListener(){},select(){}});
  const range={...field(),min:'8',max:'160',step:'1'},input=field();
- const c=vm.createContext({uniqueAssetId:prefix=>prefix,state:{size:48},scene:{size:64},document:{getElementById:id=>id==='range'?range:input}});
+ const c=vm.createContext({browserPreferences:{role:"master",visible:true,opacity:10},BrowserPreferences:{save:value=>value},uniqueAssetId:prefix=>prefix,state:{size:48},scene:{size:64},document:{getElementById:id=>id==='range'?range:input}});
  vm.runInContext(source('parseNumber')+source('createNumericControl'),c);
  c.options={rangeId:'range',valueId:'input',stateKey:'size',targetState:c.scene,format:v=>({input:String(v),aria:String(v)}),apply(){}};
  vm.runInContext('const control=createNumericControl(options);control.set(83)',c);assert.equal(c.scene.size,83);assert.equal(c.state.size,48);assert.equal(input.value,'83');
@@ -90,7 +90,7 @@ test('scene editor opens saved values in a separate draft',()=>{
 });
 test('status create and edit keep a single stable record',()=>{
  const fields={'status-editor':{open:false,dataset:{},showModal(){this.open=true},close(){this.open=false}},'status-name':{value:'',focus(){}},'status-description':{value:''},'status-editor-title':{}};
- const c=vm.createContext({uniqueAssetId:prefix=>prefix,document:{getElementById:id=>fields[id]},isMasterMode:()=>true,statusTypes:[],nextStatusId:1,explorerState:{},renderAssetExplorerContent(){}});for(const name of ['openStatusEditor','confirmStatus'])vm.runInContext(source(name),c);
+ const c=vm.createContext({browserPreferences:{role:"master",visible:true,opacity:10},BrowserPreferences:{save:value=>value},uniqueAssetId:prefix=>prefix,document:{getElementById:id=>fields[id]},isMasterMode:()=>true,statusTypes:[],nextStatusId:1,explorerState:{},renderAssetExplorerContent(){}});for(const name of ['openStatusEditor','confirmStatus'])vm.runInContext(source(name),c);
  c.openStatusEditor();fields['status-name'].value='Atordoado';c.confirmStatus();const record=c.statusTypes[0];c.openStatusEditor(record.id);assert.equal(fields['status-name'].value,'Atordoado');fields['status-description'].value='Não pode mover';c.confirmStatus();assert.equal(c.statusTypes.length,1);assert.equal(c.statusTypes[0],record);assert.equal(record.description,'Não pode mover');assert.equal(c.nextStatusId,2);
 });
 test('scene preview draws a scaled SVG grid and obeys visibility and opacity settings',()=>{

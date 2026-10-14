@@ -2,7 +2,7 @@
  'use strict';
  const absent=Symbol('absent');
  function canonical(value){if(Array.isArray(value)){const items=value.map(canonical);if(items.every(item=>item&&typeof item==='object'&&typeof item.id==='string'))items.sort((a,b)=>a.id.localeCompare(b.id));return items;}if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().filter(key=>value[key]!==undefined).map(key=>[key,canonical(value[key])]));return value;}
- function shared(project){const p=JSON.parse(JSON.stringify(project));p.settings=p.activeSceneId?{}:Object.fromEntries(['visible','absolute','distance','opacity','size'].filter(key=>key in p.settings).map(key=>[key,p.settings[key]]));return canonical(p);}
+ function shared(project){const p=JSON.parse(JSON.stringify(project));p.settings=p.activeSceneId?{}:Object.fromEntries(['absolute','distance','size'].filter(key=>key in p.settings).map(key=>[key,p.settings[key]]));for(const scene of [...p.scenes,...p.maps])if(scene.grid){delete scene.grid.visible;delete scene.grid.opacity;}return canonical(p);}
  function equal(a,b){return a===b||(a!==absent&&b!==absent&&JSON.stringify(canonical(a))===JSON.stringify(canonical(b)));}
  function merge(base,local,remote){
   function combine(b,l,r){

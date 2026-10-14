@@ -54,7 +54,7 @@
   };
   byId('project-export').onclick=()=>{try{const project=ProjectStore.validateProject(bridge.snapshot()),url=URL.createObjectURL(new Blob([JSON.stringify(project,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='CombatMaps-projeto.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),5000)}catch(error){report('error',error)}};
   const picker=byId('project-import-file');byId('project-import').onclick=()=>picker.click();
-  picker.onchange=async()=>{const file=picker.files?.[0];picker.value='';if(!file||!ready||sending)return;try{if(file.size>6000000)throw Error('Arquivo de projeto muito grande.');const project=ProjectStore.validateProject(JSON.parse(await file.text()));if(!ready||sending)return;if(!confirm('Substituir o projeto compartilhado pelos dados importados?'))return;bridge.restore(project);replaceNext=true;await sync.flush(true);drain()}catch(error){report('error',error)}};
+  picker.onchange=async()=>{const file=picker.files?.[0];picker.value='';if(!file||!ready||sending)return;try{if(file.size>6000000)throw Error('Arquivo de projeto muito grande.');const imported=ProjectStore.validateProject(JSON.parse(await file.text())),project=bridge.prepareImport?bridge.prepareImport(imported):imported;if(!ready||sending)return;if(!confirm('Substituir o projeto compartilhado pelos dados importados?'))return;bridge.restore(project);replaceNext=true;await sync.flush(true);drain()}catch(error){report('error',error)}};
   for(const event of ['pointerup','pointercancel','change','click','keyup'])document.addEventListener(event,()=>setTimeout(capture,80),true);
   const timer=setInterval(capture,500);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)capture()});

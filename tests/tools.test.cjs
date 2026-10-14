@@ -75,7 +75,7 @@ test('Escape from a corner control preserves map selection while a priority tool
 });
 
 test('master mode and heart start enabled in the real default state',()=>{
-  const c=vm.createContext({touchCapable:false});
+  const c=vm.createContext({touchCapable:false,browserPreferences:{visible:true,opacity:10}});
   const start=script.indexOf('      const state = {');const stop=script.indexOf('      function hasPriorityTool()',start);
   vm.runInContext(script.slice(start,stop),c);
   assert.equal(vm.runInContext('state.masterMode',c),true);
