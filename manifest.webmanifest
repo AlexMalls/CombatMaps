@@ -1,0 +1,16 @@
+{
+  "name": "CombatMaps",
+  "short_name": "CombatMaps",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
+  "background_color": "#042323",
+  "theme_color": "#042323",
+  "orientation": "any"
+}

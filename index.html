@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#042323">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
   <meta name="description" content="CombatMaps: uma superfície de trabalho com universo verde e grid ajustável.">
   <title>CombatMaps</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23063d3c'/%3E%3Cpath d='M11 6v20M21 6v20M6 11h20M6 21h20' stroke='%23cfeee7' stroke-width='1.3'/%3E%3C/svg%3E">
@@ -1564,6 +1568,8 @@
         <span>Modo toque</span>
         <input id="touch-mode" type="checkbox">
       </label>
+      <button id="fullscreen-toggle" type="button" aria-pressed="false">Tela cheia</button>
+      <p id="fullscreen-help" class="app-settings__history-note">No celular ou tablet, um toque rápido com 5 dedos alterna a tela cheia.</p>
       <fieldset class="app-settings__control"><legend>Barra de comando</legend><div class="command-bar-position"><label><input type="radio" name="command-position" value="side"> Lateral</label><label><input type="radio" name="command-position" value="top" checked> Superior</label></div></fieldset>
       <label class="ui-check" for="debug-enabled">
         <span>Debug</span>
@@ -1866,6 +1872,7 @@
         </footer>
       </dialog>
 
+  <script src="fullscreen-controller.js"></script>
   <script src="media-library.js"></script>
   <script src="project-store.js"></script>
   <script src="firebase-project.js"></script>
@@ -1889,6 +1896,8 @@
       const appSettings = document.getElementById("app-settings");
       const appSettingsTrigger = document.getElementById("app-settings-trigger");
       const appSettingsPanel = document.getElementById("app-settings-panel");
+      const fullscreenToggle = document.getElementById("fullscreen-toggle");
+      const fullscreenHelp = document.getElementById("fullscreen-help");
       const masterMenu = document.getElementById("master-menu");
       const masterTrigger = document.getElementById("master-trigger");
       const masterPanel = document.getElementById("master-panel");
@@ -4056,6 +4065,30 @@
         if (!highlightShapesMenu.hidden && !highlightShapesMenu.contains(event.target) && !highlightToolButton.contains(event.target)) setHighlightShapesOpen(false);
       }, true);
       toolsTrigger.addEventListener("click", () => setToolsOpen(!state.toolsOpen));
+      const fullscreenDefaultHelp = "No celular ou tablet, um toque rápido com 5 dedos alterna a tela cheia.";
+      function syncFullscreenControl() {
+        const active = FullscreenController.isFullscreen(document);
+        fullscreenToggle.textContent = active ? "Sair da tela cheia" : "Tela cheia";
+        fullscreenToggle.setAttribute("aria-pressed", String(active));
+        if (FullscreenController.isStandalone(window)) fullscreenHelp.textContent = "Aplicativo aberto sem as barras do navegador.";
+        else if (!fullscreenHelp.dataset.error) fullscreenHelp.textContent = fullscreenDefaultHelp;
+      }
+      async function toggleFullscreen() {
+        delete fullscreenHelp.dataset.error;
+        try {
+          await FullscreenController.toggle(document);
+          syncFullscreenControl();
+        } catch {
+          fullscreenHelp.dataset.error = "true";
+          fullscreenHelp.textContent = "Tela cheia não disponível neste navegador. No iPhone/iPad, adicione o CombatMaps à Tela de Início.";
+        }
+      }
+      fullscreenToggle.addEventListener("click", toggleFullscreen);
+      FullscreenController.installFiveFingerTap(document, toggleFullscreen);
+      document.addEventListener("fullscreenchange", syncFullscreenControl);
+      document.addEventListener("webkitfullscreenchange", syncFullscreenControl);
+      syncFullscreenControl();
+
       masterTrigger.addEventListener("click", () => setMasterMenuOpen(!state.masterMenuOpen));
       masterFilesButton.addEventListener("click", openAssetExplorer);
       masterTokenButton.addEventListener("click", () => setTokenDockOpen(!state.tokenDockOpen));
