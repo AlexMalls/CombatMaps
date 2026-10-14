@@ -4,13 +4,13 @@ const script=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8').match(
 function source(name){const i=script.indexOf(`      function ${name}(`);return i<0?'':script.slice(i,script.indexOf('\n      }',i)+8);}
 function setup(){
   const captures=new Set();const node=()=>({attrs:{},dataset:{},classList:{add(){}},setAttribute(k,v){this.attrs[k]=String(v)}});
-  const c=vm.createContext({GridAreaTools:require("../grid-area-tools.js"),highlightValue:{...node(),style:{}},rulerNumberFormat:new Intl.NumberFormat("pt-BR"),state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'highlight'},
+  const c=vm.createContext({WorldGeometry:require("../world-geometry.js"),GridAreaTools:require("../grid-area-tools.js"),highlightValue:{...node(),style:{}},rulerNumberFormat:new Intl.NumberFormat("pt-BR"),state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'highlight'},
     workspaceLayers:{clientWidth:960,clientHeight:720},cameraViewport:{clientWidth:960,clientHeight:720,getBoundingClientRect:()=>({left:10,top:20,right:970,bottom:740})},
     workspaceCard:{setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)},
     captures,highlightCells:new Map(),highlightTouches:new Set(),highlightBlocked:false,highlightSession:null,
     highlightCellsLayer:{children:[],append(n){this.children.push(n)},replaceChildren(...children){this.children=children}},highlightGuide:node(),
     document:{createElementNS:node}});
-  for(const name of ['clamp','getGridOrigin','cameraViewportPoint','clientToWorkspaceLayer','releaseWorkspacePointer','getHighlightCells','highlightPointAtClient','createHighlightCell','renderHighlightCells','markHighlightSegment',
+  for(const name of ['getWorldDimensions','getCameraScale','clamp','getGridOrigin','cameraViewportPoint','clientToWorkspaceLayer','releaseWorkspacePointer','getHighlightCells','highlightPointAtClient','createHighlightCell','renderHighlightCells','markHighlightSegment',
     'renderHighlightGuide','finishHighlightStroke','clearGridHighlights','ownsHighlightPointer','dispatchHighlightInput'])vm.runInContext(source(name),c);
   c.send=(type,overrides={})=>{c.event={type,pointerId:1,pointerType:'mouse',button:0,buttons:1,isPrimary:true,clientX:490,clientY:380,...overrides};vm.runInContext('dispatchHighlightInput(event)',c)};
   return c;

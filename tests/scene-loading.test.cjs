@@ -21,7 +21,7 @@ function sceneWorkspace(){
   workspaceLayers:{clientWidth:480,clientHeight:480,append(t){t.attached=true}},isMasterMode(){return c.state.masterMode},getTokenGridState:t=>t.cell||{col:0,row:0,size:1},getTokenInfo:t=>t.info,cancelTokenDeath(t){t.dataset.dead='false';c.settled=(c.settled||0)+1},
   cancelWorkspaceGestures(){c.cancelled=true},clearTokenSelection(){c.selectionCleared=true},closeAllTokenStatus(){c.panelsClosed=true},clearAllGridPoints(){},clearGridHighlights(){},
   setVisible(v){c.state.visible=v},setAbsolute(v){c.state.absolute=v},distanceControl:{set(v){c.state.distance=v}},opacityControl:{set(v){c.state.opacity=v}},sizeControl:{set(v){c.state.size=v;c.appliedWorkspaceGeometry=`480x480@${v}`}},
-  setCameraTransform(){c.cameraReset=true},updateAllTokens(){},renderActiveSceneBackground(){},updateMovementHistoryUI(){},renderSceneDock(){},tokenDockStatus:{}});
+  syncSceneWorld(){},setCameraTransform(){c.cameraReset=true},updateAllTokens(){},renderActiveSceneBackground(){},updateMovementHistoryUI(){},renderSceneDock(){},tokenDockStatus:{}});
  for(const name of ['getSceneGridSettings','settleSceneTokenDeaths','loadScene'])vm.runInContext(source(name),c);
  return {c,first,second,dead};
 }

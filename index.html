@@ -523,8 +523,8 @@
     .camera-stage {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      width: 1920px;
+      height: 1080px;
       transform-origin: 0 0;
       transform: translate(0, 0) scale(1);
     }
@@ -567,8 +567,8 @@
       border-radius: 0;
       pointer-events: none;
       background-image:
-        linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-        linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+        linear-gradient(to right, var(--color-grid) var(--grid-stroke, 1px), transparent var(--grid-stroke, 1px)),
+        linear-gradient(to bottom, var(--color-grid) var(--grid-stroke, 1px), transparent var(--grid-stroke, 1px));
       background-size: var(--grid-spacing) var(--grid-spacing);
       background-position: center center;
       opacity: 0;
@@ -1878,6 +1878,7 @@
   <script src="project-controller.js"></script>
   <script src="command-bar.js"></script>
   <script src="grid-area-tools.js"></script>
+  <script src="world-geometry.js"></script>
   <script src="token-image-tools.js"></script>
   <script src="token-image-editor.js"></script>
   <script>
@@ -2677,10 +2678,10 @@
         session.valid = local.insideViewport && Boolean(hit && cameraViewport.contains(hit) && !hit.closest('.corner-settings, .token-dock, .token-status, .command-bar, dialog')) && session.targets.every(canPlaceTokenFootprint);
         const rect = cameraViewport.getBoundingClientRect();
         session.targets.forEach((cell, index) => {
-          const pixels = cell.size * state.size * state.cameraZoom;
+          const pixels = cell.size * state.size * getCameraScale();
           Object.assign(session.ghost.children[index].style, {
-            left: `${rect.left + state.cameraX + (origin.x + cell.col * state.size) * state.cameraZoom}px`,
-            top: `${rect.top + state.cameraY + (origin.y + cell.row * state.size) * state.cameraZoom}px`,
+            left: `${rect.left + state.cameraX + (origin.x + cell.col * state.size) * getCameraScale()}px`,
+            top: `${rect.top + state.cameraY + (origin.y + cell.row * state.size) * getCameraScale()}px`,
             width: `${pixels}px`, height: `${pixels}px`
           });
         });
@@ -2779,12 +2780,12 @@
         const drag = tokenDockDrag;
         if (!drag) return;
         const cell = getDockDropAtClient(drag.typeId, clientX, clientY);
-        const type = TOKEN_TYPES[drag.typeId], pixels = type.gridSize * state.size * state.cameraZoom;
+        const type = TOKEN_TYPES[drag.typeId], pixels = type.gridSize * state.size * getCameraScale();
         let left = clientX - pixels / 2, top = clientY - pixels / 2;
         if (cell) {
           const origin = getGridOrigin(), rect = cameraViewport.getBoundingClientRect();
-          left = rect.left + state.cameraX + (origin.x + cell.col * state.size) * state.cameraZoom;
-          top = rect.top + state.cameraY + (origin.y + cell.row * state.size) * state.cameraZoom;
+          left = rect.left + state.cameraX + (origin.x + cell.col * state.size) * getCameraScale();
+          top = rect.top + state.cameraY + (origin.y + cell.row * state.size) * getCameraScale();
         }
         Object.assign(drag.ghost.style, { left: `${left}px`, top: `${top}px`, width: `${pixels}px`, height: `${pixels}px` });
         drag.ghost.dataset.valid = String(Boolean(cell));
@@ -3242,6 +3243,7 @@
         tokens.splice(0, tokens.length, ...(scene.workspaceTokens || []));
         tokens.forEach(token => workspaceLayers.append(token));
         activeSceneId = scene.id;
+        syncSceneWorld();
         movementHistory.length = 0;
         movementRedoHistory.length = 0;
         setVisible(scene.grid.visible);
@@ -3805,7 +3807,7 @@
 
       function renderHighlightGuide() {
         const session = highlightSession;
-        highlightGuide.dataset.active = String(Boolean(session && Math.hypot(session.end.x - session.start.x, session.end.y - session.start.y) > 3 / state.cameraZoom));
+        highlightGuide.dataset.active = String(Boolean(session && Math.hypot(session.end.x - session.start.x, session.end.y - session.start.y) > 3 / getCameraScale()));
         highlightValue.hidden = !session || !session.preview.size || !session.steps || (state.highlightShape || "path") === "path";
         highlightValue.dataset.active = String(!highlightValue.hidden);
         if (!session) return;
@@ -3815,7 +3817,7 @@
           const box = cells.reduce((b, [col, row]) => ({ left: Math.min(b.left, col), right: Math.max(b.right, col), top: Math.min(b.top, row), bottom: Math.max(b.bottom, row) }), { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity });
           highlightValue.setAttribute("x", String(origin.x + (box.left + box.right + 1) * state.size / 2));
           highlightValue.setAttribute("y", String(origin.y + (box.top + box.bottom + 1) * state.size / 2));
-          highlightValue.style.fontSize = `${15 / state.cameraZoom}px`;
+          highlightValue.style.fontSize = `${15 / getCameraScale()}px`;
           highlightValue.textContent = rulerNumberFormat.format(session.steps * state.distance);
           highlightValue.setAttribute("aria-label", `${state.highlightShape === "circle" ? "Raio" : state.highlightShape === "square" ? "Lado" : "Comprimento"}: ${highlightValue.textContent}`);
         }
@@ -3919,8 +3921,8 @@
         const session = rulerSession;
         if (!session) return;
         const toScreen = point => ({
-          x: point.x * state.cameraZoom + state.cameraX,
-          y: point.y * state.cameraZoom + state.cameraY
+          x: point.x * getCameraScale() + state.cameraX,
+          y: point.y * getCameraScale() + state.cameraY
         });
         const start = toScreen(session.start);
         const end = toScreen(session.end);
@@ -4396,20 +4398,25 @@
         return Math.min(max, Math.max(min, value));
       }
 
+      function getWorldDimensions() {
+        return { width: Math.max(1, workspaceLayers.clientWidth), height: Math.max(1, workspaceLayers.clientHeight) };
+      }
+      function getCameraScale(zoom = state.cameraZoom) {
+        return WorldGeometry.fitScale(getWorldDimensions(), { width: cameraViewport.clientWidth, height: cameraViewport.clientHeight }) * zoom;
+      }
+      function syncSceneWorld() {
+        const canvas = scenes.find(scene => scene.id === activeSceneId)?.canvas || { width: 1920, height: 1080 };
+        cameraStage.style.width = `${canvas.width}px`;
+        cameraStage.style.height = `${canvas.height}px`;
+      }
       function clampCameraPosition(x, y, zoom = state.cameraZoom) {
-        const width = cameraViewport.clientWidth;
-        const height = cameraViewport.clientHeight;
-        const minX = Math.min(0, width - width * zoom);
-        const minY = Math.min(0, height - height * zoom);
-        return {
-          x: clamp(x, minX, 0),
-          y: clamp(y, minY, 0)
-        };
+        return WorldGeometry.clampCamera(getWorldDimensions(), { width: cameraViewport.clientWidth, height: cameraViewport.clientHeight }, zoom, x, y);
       }
 
       function renderCameraTransform() {
         cameraTransformFrame = 0;
-        cameraStage.style.transform = `translate(${state.cameraX}px, ${state.cameraY}px) scale(${state.cameraZoom})`;
+        grid.style.setProperty("--grid-stroke", `${1 / getCameraScale()}px`);
+        cameraStage.style.transform = `translate(${state.cameraX}px, ${state.cameraY}px) scale(${getCameraScale()})`;
         scheduleTokenStatusPositions();
       }
 
@@ -4439,8 +4446,8 @@
       function clientToWorkspaceLayer(clientX, clientY) {
         const point = cameraViewportPoint(clientX, clientY);
         return {
-          x: (point.x - state.cameraX) / state.cameraZoom,
-          y: (point.y - state.cameraY) / state.cameraZoom,
+          x: (point.x - state.cameraX) / getCameraScale(),
+          y: (point.y - state.cameraY) / getCameraScale(),
           insideViewport: point.inside
         };
       }
@@ -4449,15 +4456,16 @@
         const viewportPoint = cameraViewportPoint(clientX, clientY);
         if (!viewportPoint.inside) return false;
         const oldZoom = state.cameraZoom;
+        const oldScale = getCameraScale();
         const zoom = clamp(nextZoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
         if (Math.abs(zoom - oldZoom) < 0.0001) return false;
 
-        const worldX = (viewportPoint.x - state.cameraX) / oldZoom;
-        const worldY = (viewportPoint.y - state.cameraY) / oldZoom;
+        const worldX = (viewportPoint.x - state.cameraX) / oldScale;
+        const worldY = (viewportPoint.y - state.cameraY) / oldScale;
         setCameraTransform(
           zoom,
-          viewportPoint.x - worldX * zoom,
-          viewportPoint.y - worldY * zoom
+          viewportPoint.x - worldX * getCameraScale(zoom),
+          viewportPoint.y - worldY * getCameraScale(zoom)
         );
         return true;
       }
@@ -6327,8 +6335,8 @@
         const viewportPoint = cameraViewportPoint(centroid.x, centroid.y);
         setCameraTransform(
           zoom,
-          viewportPoint.x - candidate.cameraAnchor.x * zoom,
-          viewportPoint.y - candidate.cameraAnchor.y * zoom
+          viewportPoint.x - candidate.cameraAnchor.x * getCameraScale(zoom),
+          viewportPoint.y - candidate.cameraAnchor.y * getCameraScale(zoom)
         );
         candidate.cameraMoved = candidate.cameraMoved ||
           Math.abs(zoom - candidate.startZoom) > 0.006 ||
@@ -6960,6 +6968,7 @@
 
       let appliedWorkspaceGeometry = "";
       let workspaceResizeTimer = 0;
+      let previousCameraViewport = { width: cameraViewport.clientWidth, height: cameraViewport.clientHeight };
 
       function constrainWorkspaceCell(requestedCell) {
         if (state.isMoving) return state.size;
@@ -7090,7 +7099,9 @@
           return;
         }
         sizeControl.set(state.size);
-        const position = clampCameraPosition(state.cameraX, state.cameraY, state.cameraZoom);
+        const viewport = { width: cameraViewport.clientWidth, height: cameraViewport.clientHeight };
+        const position = WorldGeometry.reframeCamera(getWorldDimensions(), previousCameraViewport, viewport, { zoom: state.cameraZoom, x: state.cameraX, y: state.cameraY });
+        previousCameraViewport = viewport;
         state.cameraX = position.x;
         state.cameraY = position.y;
         scheduleCameraTransform();
@@ -7217,6 +7228,8 @@
       setMasterMode(state.masterMode);
       initializeSceneControls();
       initializeTokenTemplateControls();
+      syncSceneWorld();
+      setCameraTransform(1, 0, 0);
       debugLog("system", "CombatMaps inicializado", { touchCapable, userAgent: navigator.userAgent });
       setVisible(state.visible);
       setAbsolute(state.absolute);
@@ -7255,7 +7268,9 @@
           return { id, name, canvas, grid: scene.id === activeSceneId ? getSceneGridSettings() : grid, backgroundUrl: cloudImagePath(backgroundUrl), fileName, fileSize, imageRect, tokens: (scene.id === activeSceneId ? tokens : scene.workspaceTokens || []).map(saveToken).filter(t => t && t.life > 0) };
         };
         const settings = {};
-        ["visible", "absolute", "distance", "opacity", "size", "cameraZoom", "cameraX", "cameraY", "touchMode", "masterMode", "debugEnabled", "blockSensitivity"].forEach(key => settings[key] = state[key]);
+        ["visible", "absolute", "distance", "opacity", "size", "cameraZoom", "touchMode", "masterMode", "debugEnabled", "blockSensitivity"].forEach(key => settings[key] = state[key]);
+        const cameraScale = getCameraScale();
+        settings.cameraWorldCenter = { x: Math.round((cameraViewport.clientWidth / 2 - state.cameraX) / cameraScale * 1e6) / 1e6, y: Math.round((cameraViewport.clientHeight / 2 - state.cameraY) / cameraScale * 1e6) / 1e6 };
         settings.autosave = document.getElementById("project-autosave").checked;
         settings.commandPosition = document.querySelector('[name="command-position"]:checked')?.value || "top";
         settings.linkOpacity = Number(document.getElementById("command-link-opacity").value);
@@ -7290,11 +7305,18 @@
         activeSceneId = null;
         setMasterMode(true);
         if (project.activeSceneId) loadScene(project.activeSceneId);
+        else syncSceneWorld();
         const settings = project.settings;
         if (typeof settings.autosave === "boolean") document.getElementById("project-autosave").checked = settings.autosave;
         setVisible(settings.visible ?? true); setAbsolute(settings.absolute ?? false);
         distanceControl.set(settings.distance ?? 1.5); opacityControl.set(settings.opacity ?? 5); sizeControl.set(settings.size ?? 48);
-        setCameraTransform(settings.cameraZoom ?? 1, settings.cameraX ?? 0, settings.cameraY ?? 0);
+        const zoom = clamp(settings.cameraZoom ?? 1, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+        const world = getWorldDimensions();
+        const center = settings.cameraWorldCenter;
+        const centerX = Number.isFinite(center?.x) ? center.x : world.width / 2;
+        const centerY = Number.isFinite(center?.y) ? center.y : world.height / 2;
+        const scale = getCameraScale(zoom);
+        setCameraTransform(zoom, cameraViewport.clientWidth / 2 - centerX * scale, cameraViewport.clientHeight / 2 - centerY * scale);
         if (typeof settings.touchMode === "boolean") setTouchMode(settings.touchMode);
         if (typeof settings.masterMode === "boolean") setMasterMode(settings.masterMode);
         if (typeof settings.debugEnabled === "boolean") setDebugEnabled(settings.debugEnabled);
@@ -7356,3 +7378,4 @@
     })();
   </script>
 </body>
+

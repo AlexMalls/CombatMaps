@@ -8,7 +8,7 @@ function setup(){
   const captures=new Set(), frames=new Map();let frameId=0;
   const element=()=>({dataset:{},attrs:{},style:{},setAttribute(k,v){this.attrs[k]=String(v)}});
   const label=element();label.offsetWidth=40;label.offsetHeight=20;
-  const ctx=vm.createContext({state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'ruler'},
+  const ctx=vm.createContext({WorldGeometry:require("../world-geometry.js"),state:{size:48,distance:1.5,cameraZoom:1,cameraX:0,cameraY:0,activeTool:'ruler'},
     workspaceLayers:{clientWidth:960,clientHeight:720},rulerSession:null,rulerFrame:0,highlightSession:null,highlightTouches:new Set(),highlightBlocked:false,finishHighlightStroke(){},
     rulerLayer:element(),rulerLine:element(),rulerGradient:element(),rulerLabel:label,
     rulerNumberFormat:new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}),
@@ -16,7 +16,7 @@ function setup(){
     workspaceCard:{setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)},
     captures,frames,requestAnimationFrame(fn){const id=++frameId;frames.set(id,fn);return id},cancelAnimationFrame:id=>frames.delete(id)
   });
-  for(const name of ['clamp','getGridOrigin','cameraViewportPoint','clientToWorkspaceLayer','releaseWorkspacePointer',
+  for(const name of ['getWorldDimensions','getCameraScale','clamp','getGridOrigin','cameraViewportPoint','clientToWorkspaceLayer','releaseWorkspacePointer',
     'getRulerDistance','getRulerLabelPosition','rulerGridPointAtClient','renderRulerMeasurement','scheduleRulerMeasurement',
     'finishRulerMeasurement','dispatchRulerInput','ownsRulerPointer'])vm.runInContext(source(name),ctx);
   assert.equal(vm.runInContext('typeof dispatchRulerInput',ctx),'function','ruler dispatcher is missing');
