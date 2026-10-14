@@ -1726,7 +1726,7 @@
           <button id="asset-explorer-close" class="asset-explorer__close" type="button" aria-label="Fechar arquivos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
         </header>
         <input id="token-image-picker" type="file" accept="image/*" hidden aria-label="Selecionar imagem de token">
-        <span id="token-image-picker-help" class="sr-only">A importação estará disponível futuramente. Selecionar um arquivo ainda não salva nem adiciona tokens.</span>
+        <span id="token-image-picker-help" class="sr-only">Escolha imagens pela biblioteca Nuvem. Arquivos locais estão desativados.</span>
         <div class="asset-explorer__body">
           <nav class="asset-explorer__nav" aria-label="Categorias de arquivos">
             <button type="button" data-asset-category="tokens" aria-pressed="true">Tokens</button>
@@ -7224,6 +7224,7 @@
         };
         const settings = {};
         ["visible", "absolute", "distance", "opacity", "size", "cameraZoom", "cameraX", "cameraY", "touchMode", "masterMode", "debugEnabled", "blockSensitivity"].forEach(key => settings[key] = state[key]);
+        settings.autosave = document.getElementById("project-autosave").checked;
         settings.commandPosition = document.querySelector('[name="command-position"]:checked')?.value || "top";
         settings.linkOpacity = Number(document.getElementById("command-link-opacity").value);
         settings.showLinks = document.getElementById("command-show-links").checked;
@@ -7258,6 +7259,7 @@
         setMasterMode(true);
         if (project.activeSceneId) loadScene(project.activeSceneId);
         const settings = project.settings;
+        if (typeof settings.autosave === "boolean") document.getElementById("project-autosave").checked = settings.autosave;
         setVisible(settings.visible ?? true); setAbsolute(settings.absolute ?? false);
         distanceControl.set(settings.distance ?? 1.5); opacityControl.set(settings.opacity ?? 5); sizeControl.set(settings.size ?? 48);
         setCameraTransform(settings.cameraZoom ?? 1, settings.cameraX ?? 0, settings.cameraY ?? 0);
@@ -7265,7 +7267,8 @@
         if (typeof settings.masterMode === "boolean") setMasterMode(settings.masterMode);
         if (typeof settings.debugEnabled === "boolean") setDebugEnabled(settings.debugEnabled);
         if (Number.isFinite(settings.blockSensitivity)) blockSensitivityControl.set(settings.blockSensitivity);
-        const position = settings.commandPosition === "side" ? "side" : "top";
+        const position = settings.autosave = document.getElementById("project-autosave").checked;
+        settings.commandPosition === "side" ? "side" : "top";
         document.querySelectorAll('[name="command-position"]').forEach(input => input.checked = input.value === position); commandBar.setOrientation(position);
         if (Number.isFinite(settings.linkOpacity)) { const opacity = document.getElementById("command-link-opacity"); opacity.value = String(settings.linkOpacity); opacity.dispatchEvent(new Event("input")); }
         if (typeof settings.showLinks === "boolean") { const links = document.getElementById("command-show-links"); links.checked = settings.showLinks; links.dispatchEvent(new Event("change")); }
