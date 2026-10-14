@@ -3,6 +3,7 @@
  'use strict';
  const codec=root.ProjectStore||(typeof module==='object'?require('./project-store.js'):null);
  const rt=root.RealtimeProject||(typeof module==='object'?require('./realtime-project.js'):null);
+ const demonstrations=root.SharedDemonstrations||(typeof module==='object'?require('./shared-demonstrations.js'):null);
  const config={apiKey:'AIzaSyCwQEiGG-6Wk9mYsB6gxkDo42vblwYOhT8',authDomain:'combatmaps-5f734.firebaseapp.com',projectId:'combatmaps-5f734',appId:'1:851486436173:web:b8e5d01344b32137106504'};
  let sdk;
  async function initialize(){if(!sdk)sdk=Promise.all(['app','firestore'].map(name=>import(`https://www.gstatic.com/firebasejs/12.19.0/firebase-${name}.js`))).then(([app,fire])=>{const instance=app.initializeApp(config);return {fire,db:fire.initializeFirestore(instance,{localCache:fire.memoryLocalCache()})}});return sdk;}
@@ -14,7 +15,7 @@
   return {
    async load(){const result=await s.fire.runTransaction(s.db,async tx=>{const head=await tx.get(meta);return head.exists()?read(tx,head.data()):{parts:{},project:null,revision:0}});remember(result);legacyRevision=result.revision;return result.project;},
    watch(onChange,onError=()=>{}){
-    let last='';return s.fire.onSnapshot(s.fire.collection(s.db,'projects','main','parts'),{includeMetadataChanges:true},snapshot=>{
+    let last='';return s.fire.onSnapshot(s.fire.query(s.fire.collection(s.db,'projects','main','parts'),s.fire.where(s.fire.documentId(),'<','~')),{includeMetadataChanges:true},snapshot=>{
      if(snapshot.metadata?.hasPendingWrites||snapshot.metadata?.fromCache)return;
      try{const next={},versions=[];for(const item of snapshot.docs){if(!/^(meta|types|statuses|scenes|maps)~\d+$/.test(item.id))continue;const decoded=rt.decodePart(item.data().json);next[item.id]=decoded.text;versions.push(decoded.revision);}
       if(!Object.keys(next).length){if(last!=='empty'){last='empty';onChange({project:null,revision:0})}return;}
@@ -42,6 +43,15 @@
      tx.set(meta,{version:1,revision:nextRevision,keys:Object.keys(next),updatedAt:s.fire.serverTimestamp()});
      return {parts:next,project:merged,revision:nextRevision};
     });remember(result);return {project:result.project,revision:result.revision};
+   },
+   watchDemonstrations(onChange,onError=()=>{}){
+    return s.fire.onSnapshot(part('~demonstrations'),{includeMetadataChanges:true},snapshot=>{
+     if(snapshot.metadata?.hasPendingWrites||snapshot.metadata?.fromCache)return;
+     try{onChange(snapshot.exists()?JSON.parse(snapshot.data().json):{})}catch(error){onError(error)}
+    },onError);
+   },
+   async saveDemonstration(id,value,now){
+    return s.fire.runTransaction(s.db,async tx=>{const ref=part('~demonstrations'),current=await tx.get(ref);let state={};if(current.exists())state=JSON.parse(current.data().json);const next=demonstrations.merge(state,id,value,now);if(JSON.stringify(next)!==JSON.stringify(state))tx.set(ref,{json:JSON.stringify(next)});});
    },
    getRevision:()=>revision
   };

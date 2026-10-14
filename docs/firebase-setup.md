@@ -28,3 +28,13 @@ A edição de uma imagem da nuvem exporta o PNG editado. Envie esse arquivo para
 - `node --test tests/*.test.cjs`
 - `node scripts/verify-realtime.cjs`: duas páginas reais, edição simultânea, assinatura, ausência de gravações ociosas e de persistência local. Somente o transporte Firebase/GitHub é simulado; não mede cobrança real.
 - `node scripts/verify-world-grid.cjs`: grid, tokens e rotação em quatro tamanhos de tela. Para fornecer Chromium instalado, defina `COMBATMAPS_BROWSER_PATH`; para fornecer a imagem de teste, defina `COMBATMAPS_TEST_MAP`.
+
+## Demonstrações compartilhadas
+
+Régua, destaques (incluindo formas e prévias) e destinos/guias de movimento são compartilhados separadamente do projeto, no documento `projects/main/parts/~demonstrations`. As regras atuais já permitem esse documento. A consulta do projeto exclui esse documento para não cobrar leituras duplicadas nem gerar salvamentos de retorno.
+
+Cada navegador tem sua própria entrada temporária: receber uma demonstração não seleciona tokens, não ativa ferramentas e não altera a câmera. Coordenadas são do grid da cena. A régua é removida ao soltar; destaques e destinos seguem a limpeza normal da ferramenta de origem. Trocar de cena remove a demonstração anterior.
+
+Envios são limitados a um por segundo, usando uma leitura de transação e uma gravação do documento compartilhado, além da entrega para cada observador. Demonstrações que continuam visíveis renovam sua validade uma vez por minuto. Depois de 90 segundos sem renovação, deixam de aparecer; entradas expiradas são removidas na próxima gravação. Sem demonstrações, não há heartbeat nem gravações. O horário é ancorado em uma requisição HEAD ao próprio site para evitar diferenças no relógio dos dispositivos; isso não consulta o Firestore.
+
+`node scripts/verify-demonstrations.cjs` verifica régua durante arraste, cone, autores simultâneos, zoom distinto, guias de destino, limpeza, relógio do celular adiantado em dois minutos e ausência de gravações do projeto. O transporte Firebase é simulado; a interface e os módulos de sincronização são reais.

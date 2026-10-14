@@ -41,7 +41,7 @@
     remote=connection.store();let seen=false;
     const first=await new Promise((resolve,reject)=>{unsubscribe=remote.watch(event=>{if(mine!==generation)return;if(!seen){seen=true;resolve(event)}else receive(event)},error=>{if(!seen){seen=true;reject(error)}else report('error',error)})});
     if(mine!==generation)return;
-    baseline=RealtimeProject.shared(first.project||bridge.empty());bridge.restore(baseline);revision=first.revision;sync.accept(snapshot());ready=true;report('saved');loading(false);drain();
+    baseline=RealtimeProject.shared(first.project||bridge.empty());bridge.restore(baseline);revision=first.revision;sync.accept(snapshot());ready=true;report('saved');loading(false);bridge.startDemonstrations?.(remote);drain();
    }catch(error){if(mine!==generation)return;remote=null;ready=false;report('error',Error(`Não foi possível carregar o projeto. Verifique a conexão e clique em Recarregar da nuvem. ${error.message||''}`));loading(true);byId('project-reload').disabled=false;}
   }
 

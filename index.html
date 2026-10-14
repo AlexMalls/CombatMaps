@@ -1595,6 +1595,7 @@
         <section class="project-settings__backup" aria-label="Backup"><button id="project-export" type="button">Exportar projeto</button><button id="project-import" type="button">Importar projeto</button></section>
         <input id="project-import-file" type="file" accept="application/json,.json" hidden>
         <p id="project-save-state" role="status" aria-live="polite">Conectando à nuvem…</p>
+        <p id="demonstration-sync-state" role="status" aria-live="polite" hidden></p>
       </fieldset>
       <section id="movement-history-control" class="app-settings__history" aria-label="Histórico de ações">
         <hr>
@@ -1875,6 +1876,7 @@
   <script src="media-library.js"></script>
   <script src="project-store.js"></script>
   <script src="realtime-project.js"></script>
+  <script src="shared-demonstrations.js"></script>
   <script src="firebase-project.js"></script>
   <script src="project-controller.js"></script>
   <script src="command-bar.js"></script>
@@ -7397,11 +7399,87 @@
         if (assetExplorer.open) renderAssetExplorerContent();
         commandBar?.refresh();
       }
+      let demonstrationChannel = null;
+      const demonstrationId = crypto.randomUUID();
+      const sharedDemonstrationsLayer = document.createElement("div");
+      sharedDemonstrationsLayer.id = "shared-demonstrations";
+      Object.assign(sharedDemonstrationsLayer.style, { position: "absolute", inset: "0", zIndex: "6", pointerEvents: "none", overflow: "hidden" });
+      sharedDemonstrationsLayer.setAttribute("aria-hidden", "true");
+      workspaceLayers.append(sharedDemonstrationsLayer);
+      let demonstrationRenderKey = "";
+      function snapshotDemonstrations() {
+        const order = getSelectionReferenceOrder();
+        const moves = gridPointMarkers.flatMap((marker, index) => {
+          const selectionIndex = marker.selectionIndex ?? index, token = order[selectionIndex];
+          return token ? [{ id: getTokenInfo(token).id, number: selectionIndex + 1, from: getTokenGridState(token), to: { col: marker.col, row: marker.row, size: marker.size } }] : [];
+        });
+        if (!highlightCells.size && !highlightSession && !rulerSession && !moves.length) return null;
+        if (!activeSceneId) ensureWorkspaceScene();
+        const origin = getGridOrigin(), at = p => ({ col: Math.floor((p.x - origin.x) / state.size), row: Math.floor((p.y - origin.y) / state.size) });
+        return { sceneId: activeSceneId, cells: [...highlightCells.keys()].map(key => key.split(",").map(Number)),
+          preview: highlightSession ? { shape: state.highlightShape || "path", start: at(highlightSession.start), end: at(highlightSession.end), erase: highlightSession.erase } : null,
+          ruler: rulerSession ? { start: { col: rulerSession.start.col, row: rulerSession.start.row }, end: { col: rulerSession.end.col, row: rulerSession.end.row } } : null, moves };
+      }
+      function renderSharedDemonstrations(shared, self, now) {
+        const visible = SharedDemonstrations.visible(shared, activeSceneId, self, now), world = getWorldDimensions();
+        const key = JSON.stringify([visible, activeSceneId, world, state.size, state.distance, getCameraScale()]);
+        if (key === demonstrationRenderKey) return;
+        demonstrationRenderKey = key;
+        sharedDemonstrationsLayer.replaceChildren();
+        const svgNode = (name, attrs = {}) => { const node = document.createElementNS("http://www.w3.org/2000/svg", name); Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value)); return node; };
+        const origin = getGridOrigin(), cell = state.size, scale = getCameraScale();
+        const center = p => ({ x: origin.x + (p.col + .5) * cell, y: origin.y + (p.row + .5) * cell });
+        const bounds = { minCol: Math.ceil(-origin.x / cell), maxCol: Math.floor((world.width - origin.x) / cell) - 1, minRow: Math.ceil(-origin.y / cell), maxRow: Math.floor((world.height - origin.y) / cell) - 1 };
+        for (const entry of visible) {
+          const group = document.createElement("div"); group.dataset.demonstrationOwner = entry.id;
+          const svg = svgNode("svg", { width: world.width, height: world.height });
+          Object.assign(svg.style, { position: "absolute", inset: "0", overflow: "hidden" }); group.append(svg);
+          const cells = new Map(entry.cells.map(([col, row]) => [`${col},${row}`, { col, row }]));
+          let previewArea = null;
+          if (entry.preview) {
+            previewArea = GridAreaTools.area(entry.preview.shape, entry.preview.start, entry.preview.end, bounds);
+            previewArea.cells.forEach(p => { const key = `${p.col},${p.row}`; if (entry.preview.erase) cells.delete(key); else cells.set(key, p); });
+          }
+          for (const p of cells.values()) if (p.col >= bounds.minCol && p.col <= bounds.maxCol && p.row >= bounds.minRow && p.row <= bounds.maxRow) svg.append(createHighlightCell(p.col, p.row));
+          const line = (start, end, className) => { const node = svgNode("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: className }); svg.append(node); return node; };
+          const label = (x, y, text, className) => { const node = svgNode("text", { x, y, "text-anchor": "middle", "dominant-baseline": "middle", class: className, "data-active": "true" }); node.style.fontSize = `${15 / scale}px`; node.textContent = text; svg.append(node); };
+          if (entry.preview) {
+            const start = center(entry.preview.start), end = center(entry.preview.end);
+            line(start, end, "grid-highlight-guide").dataset.active = "true";
+            if (entry.preview.shape !== "path" && previewArea.steps) label((start.x + end.x) / 2, (start.y + end.y) / 2, rulerNumberFormat.format(previewArea.steps * state.distance), "grid-highlight-value");
+          }
+          if (entry.ruler) {
+            const start = center(entry.ruler.start), end = center(entry.ruler.end);
+            const node = line(start, end, "ruler-layer__line"); node.dataset.sharedRuler = "true"; node.style.stroke = "var(--color-accent)"; node.style.strokeWidth = `${2 / scale}px`;
+            const text = rulerNumberFormat.format(getRulerDistance(entry.ruler.start, entry.ruler.end, state.distance));
+            const position = getRulerLabelPosition(start, end, text.length * 9 / scale, 18 / scale, 12 / scale);
+            label(position.x, position.y, text, "grid-highlight-value");
+          }
+          for (const move of entry.moves) {
+            const marker = document.createElement("span"); marker.className = "grid-point-marker"; marker.dataset.sharedMove = move.id;
+            setGridPointMarkerGeometry(marker, move.to.col, move.to.row, move.to.size, move.number); group.append(marker);
+            const source = getGridFootprintRect(move.from.col, move.from.row, move.from.size), target = getGridFootprintRect(move.to.col, move.to.row, move.to.size);
+            const start = getRectEdgePointToward(source, target.centerX, target.centerY), end = getRectEdgePointToward(target, source.centerX, source.centerY);
+            const dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
+            if (length >= 6) { const guide = document.createElement("span"); guide.className = "movement-guide"; Object.assign(guide.style, { left: `${start.x}px`, top: `${start.y}px`, width: `${length}px`, transform: `translateY(-50%) rotate(${Math.atan2(dy, dx)}rad)` }); group.append(guide); }
+          }
+          sharedDemonstrationsLayer.append(group);
+        }
+      }
+      async function startSharedDemonstrations(store) {
+        if (demonstrationChannel) return;
+        try {
+        const clock = await SharedDemonstrations.serverClock();
+        demonstrationChannel = SharedDemonstrations.start({ store, clock, id: demonstrationId, snapshot: snapshotDemonstrations, render: renderSharedDemonstrations,
+          onError: error => { const status = document.getElementById("demonstration-sync-state"); status.hidden = !error; status.textContent = error ? `Demonstrações não sincronizadas: ${error.message}` : ""; } });
+        window.addEventListener("pagehide", event => { if (!event.persisted) demonstrationChannel.stop(); });
+        } catch (error) { const status = document.getElementById("demonstration-sync-state"); status.hidden = false; status.textContent = `Demonstrações não sincronizadas: ${error.message}`; }
+      }
       let persistencePointerDown = false;
       document.addEventListener("pointerdown", () => { persistencePointerDown = true; }, true);
       ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => { persistencePointerDown = false; }, true));
       window.addEventListener("blur", () => { persistencePointerDown = false; });
-      const bridge = { snapshot: snapshotProject, restore: restoreProject, update: applyRealtimeProject, empty: emptyProject, canReceive: () => !tokenTemplateEditor.open && !sceneEditor.open && !document.getElementById("status-editor").open, stable: () => !state.isMoving && !persistencePointerDown, setLoading: loading => { workspaceLayers.inert = loading; assetExplorer.inert = loading; tokenDock.inert = loading || !state.tokenDockOpen; sceneDock.inert = loading || !state.sceneDockOpen; } };
+      const bridge = { startDemonstrations: startSharedDemonstrations, snapshot: snapshotProject, restore: restoreProject, update: applyRealtimeProject, empty: emptyProject, canReceive: () => !tokenTemplateEditor.open && !sceneEditor.open && !document.getElementById("status-editor").open, stable: () => !state.isMoving && !persistencePointerDown, setLoading: loading => { workspaceLayers.inert = loading; assetExplorer.inert = loading; tokenDock.inert = loading || !state.tokenDockOpen; sceneDock.inert = loading || !state.sceneDockOpen; } };
       ProjectController.start(bridge).catch(error => { document.getElementById("project-save-state").textContent = `Não foi possível recuperar o projeto: ${error.message}`; });
 
       // Integração opcional com agentes em navegadores que suportam WebMCP.
