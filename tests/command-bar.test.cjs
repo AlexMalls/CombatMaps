@@ -27,7 +27,7 @@ test('status application preserves health and captures previous status for undo'
  const a=token(3000),b=token(7000);b.info.status='Envenenado';const plan=CommandBar.planBatch([a,b],t=>t.info,'status','Atordoado');assert.deepEqual(plan.map(x=>x.after),[{life:3000,status:'Atordoado'},{life:7000,status:'Atordoado'}]);assert.equal(plan[1].before.status,'Envenenado');assert.equal(CommandBar.planBatch([a],t=>t.info,'status','').length,0);
 });
 function integration(){
- const a=token(1000),b=token(7000),c=vm.createContext({tokens:[a,b],a,b,CommandBar,state:{isMoving:false},movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,tokenStatusPanels:new Map(),getTokenInfo:t=>t.info,updateMovementHistoryUI(){},updateTokenHealthVisuals(){},applyTokenLifeState(t,life){t.info.life=life;t.dead=life===0},commandBar:{refresh(){}},hasPriorityTool:()=>false,debugLog(){}});
+ const a=token(1000),b=token(7000),c=vm.createContext({tokens:[a,b],a,b,CommandBar,isMasterMode:()=>true,state:{isMoving:false},movementHistory:[],movementRedoHistory:[],MOVEMENT_HISTORY_LIMIT:5,tokenStatusPanels:new Map(),getTokenInfo:t=>t.info,updateMovementHistoryUI(){},updateTokenHealthVisuals(){},applyTokenLifeState(t,life){t.info.life=life;t.dead=life===0},commandBar:{refresh(){}},hasPriorityTool:()=>false,debugLog(){}});
  for(const name of ['applyCommandHistory','applyCommandBatch','undoLastMovement','redoLastMovement'])vm.runInContext(source(name),c);return c;
 }
 test('one group damage produces one undo entry and restores each token exact pre-death life',()=>{
@@ -54,3 +54,4 @@ test('dead tokens reject all command actions even with stale selection',()=>{
 test('rainbow opacity accepts full, partial and invisible links with bounded values',()=>{
  assert.equal(CommandBar.normalizeOpacity('100'),1);assert.equal(CommandBar.normalizeOpacity('35'),.35);assert.equal(CommandBar.normalizeOpacity('0'),0);assert.equal(CommandBar.normalizeOpacity(-10),0);assert.equal(CommandBar.normalizeOpacity(200),1);assert.equal(CommandBar.normalizeOpacity('invalid'),1);
 });
+test('player cannot apply command damage, healing or status even through a direct action',()=>{const c=integration();c.isMasterMode=()=>false;for(const kind of ['damage','heal','status'])assert.equal(c.applyCommandBatch([c.a],kind,kind==='status'?'Ferido':1000),0);assert.equal(c.a.info.life,1000);assert.equal(c.movementHistory.length,0)});

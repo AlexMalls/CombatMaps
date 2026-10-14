@@ -42,10 +42,21 @@ Envios são limitados a um por segundo, usando uma leitura de transação e uma 
 
 ## Usuário e preferências do navegador
 
-A primeira visita exige escolher Mestre ou Jogador em um diálogo modal com fundo desfocado, sem interação com o mapa ou atalhos. Configurações → Alterar usuário reabre essa escolha. O perfil não é autenticação; nesta etapa ambos mantêm os mesmos recursos, com uma única diferença: apenas Mestre altera tamanho e distância entre pontos do grid. Os controles correspondentes ficam desabilitados para Jogador no mapa e no editor de cenas. Importações de Jogador preservam a geometria existente e usam a geometria atual para cenas novas.
+A primeira visita exige escolher Mestre ou Jogador em um diálogo modal com fundo desfocado, sem interação com o mapa ou atalhos. Configurações → Alterar usuário reabre essa escolha. O perfil não é autenticação; as permissões desta etapa separam controles de Mestre e Jogador. Apenas Mestre altera tamanho e distância entre pontos do grid. Os controles correspondentes ficam desabilitados para Jogador no mapa e no editor de cenas. Importações de Jogador preservam a geometria existente e usam a geometria atual para cenas novas.
 
 O navegador persiste somente perfil, visibilidade e opacidade em `combatmaps.browser-preferences.v1`. O grid começa visível em 10%. Essas preferências não entram nos dados compartilhados nem são substituídas por cenas ou projetos recebidos. O projeto continua sem persistência/recuperação automática local.
 
 Guias laranja exibem a contagem de células, usando a mesma métrica diagonal da régua e o mesmo estilo de posicionamento/tamanho do número, em laranja. A contagem é de quadrados; não é multiplicada pela distância entre pontos. O número acompanha também as demonstrações recebidas de outros navegadores.
 
 `node scripts/verify-user-preferences.cjs` usa dois processos de navegador independentes e verifica escolha obrigatória, bloqueio de Esc/F2, persistência, troca de perfil, aparência individual sem gravação do projeto, geometria compartilhada e número laranja. Somente o transporte Firebase/GitHub é simulado.
+
+
+## Interface do Jogador
+
+- Grid: somente Mostrar grid e Opacidade. Com grid oculto, a opacidade recolhe em 180 ms, sem espaço residual nem foco; respeita movimento reduzido. Grid absoluto, tamanho e distância não aparecem.
+- Engrenagem: Alterar usuário, Tela cheia (alternando entrar/sair), orientação da barra de comando e sensibilidade. Debug, salvamento/importação/exportação e histórico ficam exclusivos do Mestre.
+- Modo toque é automático em dispositivos de ponteiro primário grosso e sem hover. A opção aparece somente para Mestre em desktop; notebooks híbridos com mouse continuam podendo alternar o modo.
+- O menu do Mestre, docks e explorador ficam fechados, ocultos e indisponíveis para Jogador. Receber cenas do servidor continua funcionando.
+- Barra de comando: Jogador pode consultar/selecionar tokens, controlar vínculos e opacidade. Dano, cura e aplicação de status ficam ocultos e suas ações bloqueadas. Trocar de perfil atualiza a barra imediatamente. Jogador não desfaz/refaz comandos de dano/cura/status feitos anteriormente como Mestre.
+
+`node scripts/verify-player-ui.cjs` verifica menus compactos em celular, recolhimento, tela cheia real entrando/saindo, seleção de consulta, bloqueio de ações, troca de perfil e recarregamento. O Firebase é simulado; não há gravações de projeto causadas por esses ajustes locais.

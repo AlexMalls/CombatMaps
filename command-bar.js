@@ -43,6 +43,7 @@
     const damage = document.getElementById('command-damage-value'), heal = document.getElementById('command-heal-value');
     const message = document.getElementById('command-message');
     const opacity = document.getElementById('command-link-opacity'), opacityValue = document.getElementById('command-link-opacity-value');
+    const canEdit = () => !options.canEdit || options.canEdit();
     const selection = new Selection(), rows = new Map(), drawings = new Map();
     const format = new Intl.NumberFormat('pt-BR');
     let open = false, orientation = 'top', hovered = null, frame = 0, gesture = null, dragFrame = 0;
@@ -59,7 +60,7 @@
       rows.forEach((row, token) => row.button.setAttribute('aria-pressed', String(selection.tokens.has(token))));
       const count = selection.tokens.size;
       document.getElementById('command-count').textContent = `${count} selecionado${count === 1 ? '' : 's'}`;
-      bar.querySelectorAll('[data-command-action]').forEach(button => { button.disabled = !count || options.isMoving(); });
+      bar.querySelectorAll('[data-command-action]').forEach(button => { button.disabled = !canEdit() || !count || options.isMoving(); });
       schedule();
     }
     function setSelected(token, selected, identify = true) {
@@ -233,6 +234,7 @@
     showLinks.addEventListener('change',()=>{if(!showLinks.checked)clearDrawings();else schedule();});
     [damage,heal].forEach(input=>{input.addEventListener('input',()=>{input.value=input.value.replace(/[^0-9]/g,'').slice(0,12);});});
     bar.querySelectorAll('[data-command-action]').forEach(button=>button.addEventListener('click',()=>{
+      if (!canEdit()) return;
       const kind=button.dataset.commandAction, value=kind==='damage'?damage.value:kind==='heal'?heal.value:status.value;
       if(kind==='status' && !options.getStatuses().includes(value)){message.textContent='Escolha um status.';return;}
       const count=options.applyBatch([...selection.tokens],kind,value);
