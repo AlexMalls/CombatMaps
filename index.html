@@ -1435,7 +1435,16 @@
     #project-save-state { font-size:.8rem; overflow-wrap:anywhere; }
   </style>
   <link rel="stylesheet" href="command-bar.css">
-</head>
+<style>
+#movement-requests { position:fixed; right:14px; top:90px; width:min(330px,calc(100vw - 28px)); max-height:65vh; overflow:auto; z-index:45; padding:14px; border:1px solid #52696b; border-radius:14px; background:#17272bf2; color:#e9f0ee; box-shadow:0 10px 35px #0006; }
+#movement-requests[hidden],#movement-request-notice[hidden] { display:none; }
+#movement-requests summary { cursor:pointer; font-weight:700; }
+#movement-requests button { cursor:pointer; padding:8px 10px; margin:6px 6px 0 0; color:inherit; background:#344b4b; border:1px solid #738783; border-radius:7px; }
+#movement-requests button:disabled { opacity:.5; cursor:wait; }
+.movement-request { margin-top:12px; padding-top:12px; border-top:1px solid #52696b; }
+.movement-request p { margin:6px 0; font-size:13px; overflow-wrap:anywhere; }
+#movement-request-notice { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); max-width:80vw; padding:8px 14px; border-radius:10px; background:#17272bef; color:#eee; z-index:46; pointer-events:none; font-size:13px; }
+</style></head>
 <body>
   <main inert class="workspace" aria-label="Área de trabalho CombatMaps">
     <section class="workspace-card" aria-label="Campo de edição">
@@ -1891,6 +1900,7 @@
   <script src="project-store.js"></script>
   <script src="realtime-project.js"></script>
   <script src="shared-demonstrations.js"></script>
+  <script src="movement-requests.js"></script>
   <script src="firebase-project.js"></script>
   <script src="project-controller.js"></script>
   <script src="command-bar.js"></script>
@@ -4976,6 +4986,7 @@
         dialog.addEventListener("cancel", event => event.preventDefault());
         dialog.addEventListener("keydown", event => event.stopPropagation());
         dialog.querySelectorAll("[data-user-role]").forEach(button => button.addEventListener("click", () => {
+          clearMovementHistory();
           browserPreferences = BrowserPreferences.save({ ...browserPreferences, role: button.dataset.userRole });
           syncUserRoleControls(); dialog.close(); document.querySelector("main.workspace").inert = false;
         }));
@@ -5364,6 +5375,7 @@
             size: getGridPointForSelectionIndex(index).size
           }
         }));
+        if (!isMasterMode()) { submitPlayerMovement(selectedTokens); return; }
         const duration = 360;
         recordMovementHistory(plan);
         state.isMoving = true;
@@ -5628,6 +5640,7 @@
 
       function snapshotGridPointMarkers() {
         return gridPointMarkers.map((marker, index) => ({
+          groupId: marker.groupId,
           selectionIndex: marker.selectionIndex ?? index,
           col: marker.col,
           row: marker.row,
@@ -5642,6 +5655,7 @@
           element.className = `grid-point-marker${invalid ? " grid-point-marker--formation-invalid" : ""}`;
           const marker = {
             id: nextGridPointId++,
+            groupId: data.groupId,
             selectionIndex: data.selectionIndex ?? index,
             col: data.col,
             row: data.row,
@@ -5708,7 +5722,7 @@
         session.deltaCol = result.deltaCol;
         session.deltaRow = result.deltaRow;
         session.candidates = result.candidates;
-        replaceGridPointMarkersFromData(result.candidates, { invalid: result.invalid });
+        replaceGridPointMarkersFromData(result.candidates.map(p => ({ ...p, groupId: session.groupId })), { invalid: result.invalid });
       }
 
       function beginBlockProjection(startX, startY, currentX, currentY, pointerType) {
@@ -5718,6 +5732,7 @@
         if (!selectedTokens.length) return false;
 
         blockProjectionSession = {
+          groupId: uniqueAssetId("gesture"),
           pointerType,
           startX,
           startY,
@@ -5946,6 +5961,7 @@
           element.className = `grid-point-marker${invalid ? " grid-point-marker--formation-invalid" : ""}`;
           const marker = {
             id: nextGridPointId++,
+            groupId: session.groupId,
             selectionIndex: session.selectedTokens.indexOf(session.pendingTokens[index]),
             col: candidate.col,
             row: candidate.row,
@@ -6066,6 +6082,7 @@
           pending: pendingTokens.length
         });
         formationSession = {
+          groupId: uniqueAssetId("gesture"),
           pointerId: candidate.pointerId,
           pointerType: candidate.pointerType,
           startX: candidate.startX,
@@ -7569,6 +7586,7 @@
         }
       }
       async function startSharedDemonstrations(store) {
+        startMovementRequests(store);
         if (demonstrationChannel) return;
         try {
         const clock = await SharedDemonstrations.serverClock();
@@ -7577,6 +7595,82 @@
         window.addEventListener("pagehide", event => { if (!event.persisted) demonstrationChannel.stop(); });
         } catch (error) { const status = document.getElementById("demonstration-sync-state"); status.hidden = false; status.textContent = `Demonstrações não sincronizadas: ${error.message}`; }
       }
+
+      let movementStore = null, movementQueue = { pending: [], decisions: [] }, movementUnsubscribe = null;
+      let movementSubmitting = false, movementDeciding = false, movementQueueKey = "";
+      const movementPanel = document.createElement("aside");
+      movementPanel.id = "movement-requests"; movementPanel.setAttribute("aria-label", "Pedidos de movimento");
+      movementPanel.innerHTML = '<details open><summary>Movimentos pendentes <span id="movement-request-count">0</span></summary><div class="movement-request-bulk"><button type="button" data-decide-all="accept">Aprovar todos</button><button type="button" data-decide-all="reject">Recusar todos</button></div><div id="movement-request-list"></div></details>';
+      document.querySelector("main.workspace").append(movementPanel);
+      const movementNotice = document.createElement("div"); movementNotice.id = "movement-request-notice"; movementNotice.setAttribute("role", "status"); movementNotice.hidden = true; document.querySelector("main.workspace").append(movementNotice);
+      const pendingMovementLayer = document.createElement("div"); pendingMovementLayer.id = "pending-movements";
+      Object.assign(pendingMovementLayer.style, { position: "absolute", inset: "0", zIndex: "6", pointerEvents: "none", overflow: "hidden" }); workspaceLayers.append(pendingMovementLayer);
+      function movementMessage(message) { movementNotice.textContent = message; movementNotice.hidden = !message; }
+      function startMovementRequests(store) {
+        if (movementStore === store) return;
+        movementUnsubscribe?.(); movementStore = store;
+        movementUnsubscribe = store.watchMovementRequests(queue => { movementQueue = queue; renderMovementRequests(); }, error => movementMessage(`Movimentos não sincronizados: ${error.message}`));
+      }
+      async function submitPlayerMovement(selectedTokens) {
+        if (movementSubmitting) return;
+        if (!movementStore) { movementMessage("Aguarde a conexão para enviar o movimento."); return; }
+        if (!browserPreferences.playerId) browserPreferences = BrowserPreferences.save({ ...browserPreferences, playerId: uniqueAssetId("player") });
+        const actorId = browserPreferences.playerId, actorName = `Jogador ${actorId.slice(-6).toUpperCase()}`;
+        const submittedMarkers = selectedTokens.map((token, index) => getGridPointForSelectionIndex(index));
+        const plan = selectedTokens.map((token, index) => { const marker = submittedMarkers[index], info = getTokenInfo(token); return { groupId: marker.groupId, id: info.id, name: TOKEN_TYPES[info.typeId]?.name || "Token", number: index + 1, from: getTokenGridState(token), to: { col: marker.col, row: marker.row, size: marker.size } }; });
+        // Stable IDs survive a retry after an acknowledgement is lost.
+        const requests = MovementRequests.group(plan).map(group => {
+          const marker = submittedMarkers[plan.indexOf(group[0])];
+          marker.requestId ||= uniqueAssetId("move");
+          return { id: marker.requestId, actorId, actorName, sceneId: activeSceneId, gridSize: state.size, canvas: getWorldDimensions(), createdAt: Date.now(), moves: group.map(({ groupId, ...move }) => move) };
+        });
+        movementSubmitting = true; movementMessage("Enviando movimento…");
+        try {
+          await movementStore.submitMovementRequests(requests);
+          for (const marker of submittedMarkers) { const index = gridPointMarkers.indexOf(marker); if (index >= 0) { gridPointMarkers.splice(index, 1); marker.element.remove(); } }
+          updateGridPointMarkers(); movementMessage("Movimento enviado. Aguardando o Mestre.");
+        } catch (error) { movementMessage(`Não foi possível enviar: ${error.message}`); }
+        finally { movementSubmitting = false; }
+      }
+      async function decideMovementRequests(ids, accept) {
+        if (!isMasterMode() || movementDeciding || !movementStore) return;
+        movementDeciding = true; renderMovementRequests();
+        try { await movementStore.decideMovementRequests(ids, accept); movementMessage(accept ? "Pedidos avaliados." : "Movimentos recusados."); }
+        catch (error) { movementMessage(`Não foi possível avaliar: ${error.message}`); }
+        finally { movementDeciding = false; renderMovementRequests(); }
+      }
+      movementPanel.addEventListener("click", event => { const button = event.target.closest("[data-decide-all]"); if (button) decideMovementRequests((movementQueue.pending || []).map(r => r.id), button.dataset.decideAll === "accept"); });
+      function renderMovementRequests() {
+        const pending = movementQueue.pending || [];
+        movementPanel.hidden = !isMasterMode() || !pending.length;
+        const key = JSON.stringify([movementQueue, isMasterMode(), movementDeciding, activeSceneId, state.size, getWorldDimensions(), getCameraScale()]);
+        if (key === movementQueueKey) return; movementQueueKey = key;
+        document.getElementById("movement-request-count").textContent = pending.length;
+        movementPanel.querySelectorAll("[data-decide-all]").forEach(b => b.disabled = movementDeciding);
+        const list = document.getElementById("movement-request-list"); list.replaceChildren();
+        for (const request of pending) {
+          const card = document.createElement("section"); card.className = "movement-request"; card.dataset.requestId = request.id;
+          const title = document.createElement("strong"); title.textContent = request.actorName;
+          const description = document.createElement("p"); description.textContent = `Mover ${request.moves.map(m => `${m.name || "Token"} #${m.number}`).join(", ")} · ${scenes.find(s => s.id === request.sceneId)?.name || "Cena"}`;
+          card.append(title, description);
+          for (const [text, accept] of [["Aceitar", true], ["Recusar", false]]) { const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.disabled = movementDeciding; button.addEventListener("click", () => decideMovementRequests([request.id], accept)); card.append(button); }
+          list.append(card);
+        }
+        pendingMovementLayer.replaceChildren();
+        for (const request of pending.filter(r => r.sceneId === activeSceneId && r.gridSize === state.size)) for (const move of request.moves) {
+          const marker = document.createElement("span"); marker.className = "grid-point-marker"; marker.dataset.pendingMove = request.id;
+          setGridPointMarkerGeometry(marker, move.to.col, move.to.row, move.to.size, move.number); pendingMovementLayer.append(marker);
+          appendMovementDistanceLabel(pendingMovementLayer, move.from, move.to);
+          const source = getGridFootprintRect(move.from.col, move.from.row, move.from.size), target = getGridFootprintRect(move.to.col, move.to.row, move.to.size);
+          const start = getRectEdgePointToward(source, target.centerX, target.centerY), end = getRectEdgePointToward(target, source.centerX, source.centerY), dx = end.x - start.x, dy = end.y - start.y;
+          const guide = document.createElement("span"); guide.className = "movement-guide"; Object.assign(guide.style, { left: `${start.x}px`, top: `${start.y}px`, width: `${Math.hypot(dx, dy)}px`, transform: `translateY(-50%) rotate(${Math.atan2(dy, dx)}rad)` }); pendingMovementLayer.append(guide);
+        }
+        const last = (movementQueue.decisions || []).filter(r => r.actorId === browserPreferences.playerId).at(-1);
+        if (last && !pending.some(r => r.actorId === browserPreferences.playerId)) movementMessage(last.status === "accepted" ? "Movimento aprovado." : `Movimento recusado. ${last.reason || ""}`);
+      }
+      // Re-render only on changed queue/view state; this timer never reads or writes Firebase.
+      window.setInterval(renderMovementRequests, 250);
+
       let persistencePointerDown = false;
       document.addEventListener("pointerdown", () => { persistencePointerDown = true; }, true);
       ["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, () => { persistencePointerDown = false; }, true));
