@@ -983,8 +983,8 @@
       to { opacity: 1; }
     }
 
-    .token--moving {
-      transition: left 360ms cubic-bezier(0.2, 0.8, 0.2, 1), top 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    .token--moving, .token--remote-moving {
+      transition: left 600ms cubic-bezier(0.42, 0, 0.58, 1), top 600ms cubic-bezier(0.42, 0, 0.58, 1);
       will-change: left, top;
     }
     .token-action-menu {
@@ -1438,6 +1438,7 @@
 <style>
 #movement-requests { position:fixed; right:14px; top:90px; width:min(330px,calc(100vw - 28px)); max-height:65vh; overflow:auto; z-index:45; padding:14px; border:1px solid #52696b; border-radius:14px; background:#17272bf2; color:#e9f0ee; box-shadow:0 10px 35px #0006; }
 #movement-requests[hidden],#movement-request-notice[hidden] { display:none; }
+.token--request-highlight { outline:3px solid #ff9e38; outline-offset:5px; }
 #movement-requests summary { cursor:pointer; font-weight:700; }
 #movement-requests button { cursor:pointer; padding:8px 10px; margin:6px 6px 0 0; color:inherit; background:#344b4b; border:1px solid #738783; border-radius:7px; }
 #movement-requests button:disabled { opacity:.5; cursor:wait; }
@@ -2417,7 +2418,7 @@
           Object.entries(outlineBounds).forEach(([attribute, value]) => panel.outline.setAttribute(attribute, value));
           occupied.push(position);
         });
-        if (state.isMoving && tokenStatusPanels.size) scheduleTokenStatusPositions();
+        if ((state.isMoving || tokens.some(token => token.classList.contains("token--remote-moving"))) && tokenStatusPanels.size) scheduleTokenStatusPositions();
       }
 
       function scheduleTokenStatusPositions() {
@@ -4727,7 +4728,7 @@
             remaining: movementHistory.length,
             redoEntries: movementRedoHistory.length
           });
-        }, 400);
+        }, 640);
 
         return true;
       }
@@ -4822,7 +4823,7 @@
             undoEntries: movementHistory.length,
             remainingRedo: movementRedoHistory.length
           });
-        }, 400);
+        }, 640);
 
         return true;
       }
@@ -5376,7 +5377,7 @@
           }
         }));
         if (!isMasterMode()) { submitPlayerMovement(selectedTokens); return; }
-        const duration = 360;
+        const duration = 600;
         recordMovementHistory(plan);
         state.isMoving = true;
         updateMovementHistoryUI();
@@ -7361,7 +7362,7 @@
         getInfo: getTokenInfo,
         getName: token => { const info = getTokenInfo(token); return `${TOKEN_TYPES[info?.typeId]?.name || "Token"} · ${info?.id?.split("~")[0] || ""}`; },
         getStatuses: () => [...new Set(["Normal", ...statusTypes.map(status => status.name)])],
-        isMoving: () => state.isMoving,
+        isMoving: () => state.isMoving || tokens.some(token => token.classList.contains("token--remote-moving")),
         clearMovementSelection: () => { if (hasSelectedToken() && !state.isMoving) clearTokenSelection(); },
         applyBatch: applyCommandBatch,
         getMapRect: () => cameraViewport.getBoundingClientRect(),
@@ -7461,6 +7462,19 @@
         updateTokenHealthVisuals(token);
         return token;
       }
+      const remoteMovementTimers = new WeakMap();
+      function animateRemoteMovement(token) {
+        clearTimeout(remoteMovementTimers.get(token));
+        token.classList.add("token--remote-moving");
+        // Commit the visible starting position before applying server coordinates.
+        // Retargeting an ongoing CSS transition starts from its current position.
+        token.getBoundingClientRect();
+        remoteMovementTimers.set(token, window.setTimeout(() => {
+          token.classList.remove("token--remote-moving");
+          remoteMovementTimers.delete(token);
+          scheduleTokenStatusPositions();
+        }, 640));
+      }
       function applyRealtimeProject(input) {
         const incoming = ProjectStore.validateProject(input), before = snapshotProject();
         const local = realtimeLocalSettings();
@@ -7484,6 +7498,9 @@
             wanted.add(value.id);
             let token = units.get(value.id);
             if (token && getTokenInfo(token)?.typeId !== value.typeId) { closeTokenStatus(token); token.remove(); tokenData.delete(value.id); tokenIds.delete(token); token = null; }
+            if (token?.isConnected && saved.id === activeSceneId && oldScene?.grid.size === saved.grid.size &&
+                Number(token.dataset.gridSize) === value.size &&
+                (Number(token.dataset.gridCol) !== value.col || Number(token.dataset.gridRow) !== value.row)) animateRemoteMovement(token);
             if (!token) token = createPersistedToken(value);
             Object.assign(token.dataset, { gridCol: String(value.col), gridRow: String(value.row), gridSize: String(value.size) });
             Object.assign(getTokenInfo(token), { life: value.life, maxLife: value.maxLife, status: value.status });
@@ -7640,6 +7657,10 @@
         finally { movementDeciding = false; renderMovementRequests(); }
       }
       movementPanel.addEventListener("click", event => { const button = event.target.closest("[data-decide-all]"); if (button) decideMovementRequests((movementQueue.pending || []).map(r => r.id), button.dataset.decideAll === "accept"); });
+      function highlightMovementRequest(request) {
+        const ids = new Set(isMasterMode() && request?.sceneId === activeSceneId ? request.moves.map(move => move.id) : []);
+        tokens.forEach(token => token.classList.toggle("token--request-highlight", ids.has(getTokenInfo(token)?.id)));
+      }
       function renderMovementRequests() {
         const pending = movementQueue.pending || [];
         movementPanel.hidden = !isMasterMode() || !pending.length;
@@ -7647,12 +7668,17 @@
         if (key === movementQueueKey) return; movementQueueKey = key;
         document.getElementById("movement-request-count").textContent = pending.length;
         movementPanel.querySelectorAll("[data-decide-all]").forEach(b => b.disabled = movementDeciding);
+        highlightMovementRequest(null);
         const list = document.getElementById("movement-request-list"); list.replaceChildren();
         for (const request of pending) {
           const card = document.createElement("section"); card.className = "movement-request"; card.dataset.requestId = request.id;
           const title = document.createElement("strong"); title.textContent = request.actorName;
           const description = document.createElement("p"); description.textContent = `Mover ${request.moves.map(m => `${m.name || "Token"} #${m.number}`).join(", ")} · ${scenes.find(s => s.id === request.sceneId)?.name || "Cena"}`;
           card.append(title, description);
+          card.addEventListener("mouseenter", () => highlightMovementRequest(request));
+          card.addEventListener("mouseleave", () => highlightMovementRequest(null));
+          card.addEventListener("focusin", () => highlightMovementRequest(request));
+          card.addEventListener("focusout", event => { if (!card.contains(event.relatedTarget)) highlightMovementRequest(null); });
           for (const [text, accept] of [["Aceitar", true], ["Recusar", false]]) { const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.disabled = movementDeciding; button.addEventListener("click", () => decideMovementRequests([request.id], accept)); card.append(button); }
           list.append(card);
         }

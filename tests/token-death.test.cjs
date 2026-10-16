@@ -62,7 +62,7 @@ test('health and movement undo share chronological history instead of skipping t
   c.token.dataset.gridCol='4';c.token.dataset.gridRow='5';
   c.run('getTokenInfo(token).life=1000;changeTokenLife(token,-1000);undoLastMovement()');
   assert.equal(c.run('getTokenInfo(token).life'),1000);assert.equal(c.token.dataset.gridCol,'4');
-  c.run('undoLastMovement()');c.tick(400);assert.equal(c.token.dataset.gridCol,'2');assert.equal(c.token.dataset.gridRow,'3');
+  c.run('undoLastMovement()');c.tick(640);assert.equal(c.token.dataset.gridCol,'2');assert.equal(c.token.dataset.gridRow,'3');
   c.run('undoLastMovement()');assert.equal(c.run('getTokenInfo(token).life'),10000);
 });
 
@@ -71,7 +71,7 @@ test('mobile movements and health share history so a newer move is undone before
   const other={dataset:{tokenId:'other',gridCol:'0',gridRow:'0',gridSize:'1'},isConnected:true,classList:{add(){},remove(){}}};
   c.other=other;c.run('recordMovementHistory([{token:other,target:{col:5,row:4,size:1}}])');
   other.dataset.gridCol='5';other.dataset.gridRow='4';
-  c.run('undoGridPointOrClearSelection()');c.tick(400);
+  c.run('undoGridPointOrClearSelection()');c.tick(640);
   assert.equal(other.dataset.gridCol,'0');assert.equal(c.run('getTokenInfo(token).life'),0);
   c.run('undoGridPointOrClearSelection()');assert.equal(c.run('getTokenInfo(token).life'),1000);
 });

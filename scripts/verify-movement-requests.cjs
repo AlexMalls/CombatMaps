@@ -38,11 +38,30 @@ assert.equal(await phone.locator('#token-a').getAttribute('data-grid-row'),'0');
 await phone.evaluate(()=>window.movementTest.plan(true));await phone.evaluate(()=>window.movementTest.send());
 await pc.waitForFunction(()=>document.querySelectorAll('.movement-request').length===1);
 assert.equal(await pc.locator('.movement-request p').textContent().then(t=>t.includes('#1')&&t.includes('#2')),true);
+const selectionBefore=await pc.locator('#token-a').getAttribute('data-selected');
+await pc.locator('.movement-request').hover();assert.equal(await pc.locator('.token--request-highlight').count(),2);
+assert.equal(await pc.locator('#token-a').getAttribute('data-selected'),selectionBefore);
+await pc.mouse.move(50,50);assert.equal(await pc.locator('.token--request-highlight').count(),0);
 await pc.screenshot({path:'/tmp/movement-queue-pending.png'});
 await phone.reload();await phone.waitForSelector('#token-a');await phone.waitForSelector('[data-pending-move]');
 await pc.getByRole('button',{name:'Aceitar',exact:true}).click();
 await phone.waitForFunction(()=>document.querySelector('#token-a').dataset.gridRow==='2'&&document.querySelector('#token-b').dataset.gridRow==='2');
 await pc.waitForFunction(()=>document.querySelector('#token-a').dataset.gridRow==='2');
+for (const page of [pc,phone]) {
+ const motion=await page.locator('#token-a').evaluate(token=>{
+  const animation=token.getAnimations().find(a=>a.transitionProperty==='top');
+  if(!animation)return null;
+  animation.pause();const duration=animation.effect.getTiming().duration,values=[];
+  for(const fraction of [0,.25,.5,.75,1]){animation.currentTime=duration*fraction;values.push(parseFloat(getComputedStyle(token).top));}
+  animation.finish();return {duration,values};
+ });
+ assert.ok(motion,'shared movement must animate rather than teleport');
+ const [start,quarter,middle,threeQuarter,end]=motion.values,span=end-start;
+ assert.ok(motion.duration>=500&&motion.duration<=1000);
+ assert.ok((quarter-start)/span<.2,'slow start');assert.ok(Math.abs((middle-start)/span-.5)<.02,'fast middle');assert.ok((end-threeQuarter)/span<.2,'slow arrival');
+}
+console.log('PASS approved movement accelerates then decelerates on both devices');
+
 assert.equal(await phone.locator('[data-pending-move]').count(),0);
 const queue=JSON.parse(database.get('projects/main/parts/~movement-requests').json);assert.equal(queue.pending.length,0);assert.equal(queue.decisions.filter(d=>d.status==='accepted').length,1);
 console.log('PASS individual requests, grouped stack, no movement before approval, rejection preserves selection, pending survives reload, atomic approval synchronized across browsers');
